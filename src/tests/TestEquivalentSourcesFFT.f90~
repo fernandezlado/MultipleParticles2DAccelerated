@@ -1,0 +1,632 @@
+MODULE modForwardMap
+
+
+
+  USE modParameters
+
+  USE modFFT
+
+  USE modCell
+
+  USE modProjectionReferenceCell
+
+
+
+  IMPLICIT NONE
+
+
+
+  TYPE (FFT_2D) :: fft_hor, fft_ver
+  
+  TYPE (ProjectionReferenceCell) :: proj_cell_hor, proj_cell_ver
+
+  TYPE (InterpolationReferenceCell) :: interp_cell
+  
+  TYPE(Cell), DIMENSION(:,:), ALLOCATABLE :: cellArray
+
+  TYPE(Obstacle), DIMENSION(:,:), ALLOCATABLE :: obstacleArray
+
+  COMPLEX(8),DIMENSION(:,:,:),ALLOCATABLE :: psi, res
+
+  COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: mon_equiv_hor, mon_equiv_ver
+
+  COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: equiv_pad
+
+  COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: dip_equiv_hor, dip_equiv_ver
+  
+  COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: mon_hor_ker_fft, dip_hor_ker_fft
+
+  COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: mon_ver_ker_fft, dip_ver_ker_fft
+
+  COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: field_equiv_hor, field_equiv_ver
+
+  COMPLEX(8),DIMENSION(:),ALLOCATABLE :: x_hor, x_ver
+
+
+  PRIVATE :: proj_cell_hor, proj_cell_ver, interp_cell
+
+  PRIVATE :: cellArray, obstacleArray
+
+  PRIVATE :: mon_equiv_hor, mon_equiv_ver
+
+  PRIVATE :: dip_equiv_hor, dip_equiv_ver
+
+  PRIVATE :: mon_hor_ker_fft, dip_hor_ker_fft
+
+  PRIVATE :: mon_ver_ker_fft, dip_ver_ker_fft
+
+  PRIVATE :: x_hor, x_ver
+
+
+
+CONTAINS
+
+
+  
+  SUBROUTINE initForwardMap ( phy, geo, alg )
+
+
+    TYPE (phy_Parameters) :: phy
+    
+    TYPE (geo_Parameters) :: geo
+
+    TYPE (alg_Parameters) :: alg
+
+
+    INTEGER :: N_x, N_y
+
+    ! Create array to store densities and the result of the Forward Map
+
+    ALLOCATE ( psi ( alg % N_dis, geo % N_row, geo % N_col ) )
+
+    ALLOCATE ( res ( alg % N_dis, geo % N_row, geo % N_col) )
+
+    
+    psi = 1.0d0
+
+    res = 1.0d0
+
+    ! Create Projection and Interpolation reference Cells
+
+    CALL createProjectionReferenceCell ( proj_cell_hor, alg % N_src_hor, alg % N_coll_hor, geo % L_x, geo % L_y, phy % k, 'H' )
+
+    CALL createProjectionReferenceCell ( proj_cell_ver, alg % N_src_ver, alg % N_coll_ver, geo % L_x, geo % L_y, phy % k, 'V' )
+
+    CALL createInterpolationReferenceCell ( interp_cell, alg % N_src_hor, alg % N_src_ver, alg % N_wave, geo % L_x, geo % L_y, phy % k )
+
+    ! Create x_hor, x_ver: solutions of least square problem to obtain equiv. sources
+
+    ALLOCATE ( x_hor ( 2 * 4 * alg % N_src_hor ) )
+
+    ALLOCATE ( x_ver ( 2 * 4 * alg % N_src_ver ) )
+
+
+    ! FFT HORIZONTAL
+
+    N_x = 2 * alg % N_src_hor * ( geo % N_col + 2 )
+
+    N_y = geo % N_row + 3
+
+    ! CALL createFFT_2D ( fft_hor, 2 * N_x, 2 * N_y )
+
+
+    ! ALLOCATE ( mon_hor_ker_fft ( 2 * N_x, 2 * N_y ) )
+  
+    ! ALLOCATE ( dip_hor_ker_fft ( 2 * N_x, 2 * N_y ) ) 
+    
+    
+    ! CALL computeKernelFFT (phy, geo, alg, mon_hor_ker_fft, 'H', 'M', fft_hor )
+
+    ! CALL computeKernelFFT (phy, geo, alg, dip_hor_ker_fft, 'H', 'D', fft_hor )
+
+
+    ALLOCATE ( mon_equiv_hor ( 2 * N_x, 2 * N_y ) )
+
+    ALLOCATE ( dip_equiv_hor ( 2 * N_x, 2 * N_y ) )
+
+
+    ALLOCATE ( field_equiv_hor ( 2 * N_x, 2 * N_y ) )
+
+
+    ! FFT VERTICAL
+
+    N_x = geo % N_col + 3
+
+    N_y = 2 * alg % N_src_ver * ( geo % N_row + 2 )
+
+
+  !   CALL createFFT_2D ( fft_ver, 2 * N_x, 2 * N_y )
+    
+
+!     ALLOCATE ( mon_ver_ker_fft ( 2 * N_x, 2 * N_y ) )
+    
+!     ALLOCATE ( dip_ver_ker_fft ( 2 * N_x, 2 * N_y ) ) 
+
+    
+!     CALL computeKernelFFT (phy, geo, alg, mon_ver_ker_fft, 'V', 'M', fft_ver )
+
+!     CALL computeKernelFFT (phy, geo, alg, dip_ver_ker_fft, 'V', 'D', fft_ver )
+
+
+    ALLOCATE ( mon_equiv_ver ( 2 * N_x, 2 * N_y ) )
+
+    ALLOCATE ( dip_equiv_ver ( 2 * N_x, 2 * N_y ) )
+
+
+    ALLOCATE ( field_equiv_ver ( 2 * N_x, 2 * N_y ) )
+
+
+    ! Create Cell and Obstacles arrays
+
+    ALLOCATE ( cellArray ( 0 : geo % N_row + 1, 0 : geo % N_col + 1 ) )
+
+    ALLOCATE ( obstacleArray ( 1 : geo % N_row, 1 : geo % N_col ) )    
+    
+
+    CALL createArrayGeometry ( phy, geo, alg )
+
+
+    write(*,*) "Forward Map initiated"
+
+
+  END SUBROUTINE initForwardMap
+
+
+
+  SUBROUTINE createArrayGeometry ( phy, geo, alg ) 
+
+    
+    TYPE (phy_Parameters) :: phy
+    
+    TYPE (geo_Parameters) :: geo
+
+    TYPE (alg_Parameters) :: alg
+
+
+    INTEGER :: n, m
+
+      
+    DO m = 1, geo % N_col
+
+       DO n = 1, geo % N_row          
+
+          CALL createObstacle ( obstacleArray ( n, m ), 0, (/ geo % radius, geo % L_x * m, geo % L_y * n /), alg % N_dis ) 
+
+          CALL createCell ( cellArray ( n, m ), geo % L_x * m, geo % L_y * n, obstacleArray ( n, m ), psi (:, n, m), proj_cell_hor, proj_cell_ver, interp_cell, phy % k )
+
+       END DO
+
+    END DO
+
+
+     DO n = 1, geo % N_def
+
+        NULLIFY ( cellArray ( geo % defects_location (n, 1), geo % defects_location (n, 2) ) % innerObstacle )
+
+     END DO
+
+
+  END SUBROUTINE createArrayGeometry
+
+
+  
+  ! SUBROUTINE computeKernelFFT ( phy, geo, alg, mat, orient_flag, pole_flag, fft_handler)
+  !   !orient_flag = 'H' or 'V' for horizontal or vertical cell
+  !   !pole_flag = 'M' or 'D' for monopole or dipole kernel
+    
+
+  !   TYPE (phy_Parameters) :: phy
+
+  !   TYPE (geo_Parameters) :: geo
+
+  !   TYPE (alg_Parameters) :: alg
+
+  !   COMPLEX(8),DIMENSION(:,:) :: mat
+
+  !   CHARACTER :: orient_flag, pole_flag
+    
+  !   TYPE (FFT_2D) :: fft_handler
+
+    
+  !   REAL(8) :: step_x, step_y, x_0, y_0, d_x, d_y
+
+  !   INTEGER :: n, m, N_x, N_y
+
+  !   REAL(8),DIMENSION(:),ALLOCATABLE :: src_x, src_y
+
+    
+  !   IF ( orient_flag == 'H' ) THEN
+       
+
+  !      N_x = 2 * alg % N_src_hor * ( geo % N_col + 2 )
+       
+  !      N_y = geo % N_row + 3
+
+
+  !      step_x = geo % L_x / ( 2 * alg % N_src_hor )
+
+  !      step_y = geo % L_y 
+
+       
+  !      d_x = 0
+
+  !      d_y = 1.0d0
+
+
+  !   ELSE
+
+       
+  !      N_x = geo % N_col + 3 
+
+  !      N_y = 2 * alg % N_src_ver * ( geo % N_row + 2 )
+
+       
+  !      step_x = geo % L_x
+
+  !      step_y = geo % L_y / ( 2 * alg % N_src_ver )
+
+       
+  !      d_x = 1.0d0
+
+  !      d_y = 0.0d0
+
+
+  !   END IF
+
+    
+  !   ALLOCATE ( src_x ( 2 * N_x ) )
+
+  !   ALLOCATE ( src_y ( 2 * N_y ) )
+
+
+  !   src_x ( 1 : N_x ) = step_x * (/ ( n, n = 0, N_x - 1 ) /)
+   
+  !   src_y ( 1 : N_y ) = step_y * (/ ( m, m = 0, N_y - 1 ) /)
+
+
+  !   src_x ( N_x + 1 : 2 * N_x ) = step_x * (/ ( n, n = - N_x, -1 ) /)
+
+  !   src_y ( N_y + 1 : 2 * N_y ) = step_y * (/ ( m, m = - N_y, -1 ) /)
+
+
+  !   IF ( pole_flag == 'M' ) THEN
+
+
+  !      FORALL ( n = 1 : 2 * N_x, m = 1 : 2 * N_y )
+
+  !         mat(n,m) = G_0 ( phy % k, src_x(n), src_y(m) )
+             
+  !      END FORALL
+
+
+  !   ELSE
+
+
+  !      FORALL ( n = 1 : 2 * N_x, m = 1 : 2 * N_y )
+
+  !         mat(n,m) = DG_0 ( phy % k, src_x(n), src_y(m), d_x, d_y )
+
+  !      END FORALL
+
+
+  !   END IF
+
+
+  !   ! Singular term src_x = 0, src_y = 0
+
+  !   mat ( 1, 1 ) = 0
+    
+  !   ! Compute FFT
+ 
+  !   CALL directFFT ( fft_handler, mat, 1 )
+
+
+  !   DEALLOCATE ( src_x, src_y )
+
+
+  ! END SUBROUTINE computeKernelFFT
+
+
+
+  SUBROUTINE ObstacleToCellMap ( cell_mn, refCell_hor, refCell_ver, x_h, x_v )
+
+    ! Computes the horizontal and vertical equivalent sources of the mn-th cell
+    ! To represent the field of the inner obstacle
+    
+
+    TYPE(Cell) :: cell_mn
+
+    TYPE(ProjectionReferenceCell) :: refCell_hor, refCell_ver
+
+    COMPLEX(8),DIMENSION(:) :: x_h, x_v
+
+    
+    COMPLEX(8),DIMENSION(:),ALLOCATABLE :: field_at_hor_coll, field_at_ver_coll
+    
+    
+    ALLOCATE ( field_at_hor_coll ( 1 : 4 * refCell_hor % N_coll ) )
+
+    ALLOCATE ( field_at_ver_coll ( 1 : 4 * refCell_ver % N_coll ) )
+
+
+    CALL computeFieldInCollocationPoints ( cell_mn, field_at_hor_coll, field_at_ver_coll )
+
+    CALL computeEquivalentSourceAmplitude ( refCell_hor, field_at_hor_coll, x_h)
+    
+    CALL computeEquivalentSourceAmplitude ( refCell_ver, field_at_ver_coll, x_v)
+
+    
+    DEALLOCATE ( field_at_hor_coll, field_at_ver_coll )
+
+
+  END SUBROUTINE ObstacleToCellMap
+
+
+
+  SUBROUTINE StoreEquivalentSourceAmplitude ( x, weights, N_src, type_flag, pole_flag)
+
+    ! Stores the values of the equivalent sources in mon_weights, dip_weights.
+    ! mon_weights,dip_weights contain the weights of all the equivalent sources
+    ! to perform, afterwards, the FFT. 
+
+    ! Read notes for a better comprehension of the order in which the weights 
+    ! are stored
+
+
+    COMPLEX(8),DIMENSION(:),TARGET :: x
+
+    COMPLEX(8),DIMENSION(:,:),TARGET :: weights
+
+    INTEGER :: N_src
+
+    COMPLEX(8),DIMENSION(:),POINTER :: panel_1, panel_2, panel_3, panel_4
+
+    CHARACTER :: type_flag, pole_flag
+
+
+    REAL(8) :: sgn
+
+    COMPLEX(8),DIMENSION(:),POINTER :: x_1, x_2, x_3, x_4
+
+
+    IF ( pole_flag == 'M' ) THEN
+       
+
+       x_1 => x ( 0 * N_src + 1 : 1 * N_src )
+
+       x_4 => x ( 6 * N_src + 1 : 7 * N_src )
+
+       x_2 => x ( 3 * N_src : 2 * N_src + 1 : -1 )
+
+       x_3 => x ( 5 * N_src : 4 * N_src + 1 : -1 )
+
+       sgn = 1.0d0
+
+    ELSE 
+
+
+       x_1 => x ( 1 * N_src + 1 : 2 * N_src )
+
+       x_4 => x ( 7 * N_src + 1 : 8 * N_src )
+
+       x_2 => x ( 4 * N_src : 3 * N_src + 1 : -1 )
+
+       x_3 => x ( 6 * N_src : 5 * N_src + 1 : -1 )
+
+       sgn =-1.0d0
+
+    END IF
+
+
+    IF ( type_flag == 'H' ) THEN
+       
+
+       panel_1 => weights ( 1 * N_src + 1 : 2 * N_src, 2 )
+
+       panel_2 => weights ( 0 * N_src + 1 : 1 * N_src, 2 )
+
+       panel_3 => weights ( 0 * N_src + 1 : 1 * N_src, 1 )
+
+       panel_4 => weights ( 1 * N_src + 1 : 2 * N_src, 1 )
+
+              
+    ELSE IF ( type_flag == 'V' ) THEN
+
+
+       panel_1 => weights ( 0 * N_src + 1 : 1 * N_src, 2 )
+
+       panel_2 => weights ( 1 * N_src + 1 : 2 * N_src, 2 )
+
+       panel_3 => weights ( 1 * N_src + 1 : 2 * N_src, 1 )
+
+       panel_4 => weights ( 0 * N_src + 1 : 1 * N_src, 1 )
+
+
+    END IF
+
+
+    panel_1 = panel_1 + x_1
+
+    panel_2 = panel_2 + x_2
+
+    panel_3 = panel_3 + sgn * x_3
+
+    panel_4 = panel_4 + sgn * x_4
+
+
+    NULLIFY ( x_1, x_2, x_3, x_4 )
+
+    NULLIFY ( panel_1, panel_2, panel_3, panel_4 )
+
+
+  END SUBROUTINE StoreEquivalentSourceAmplitude
+
+
+
+  SUBROUTINE ForwardMap (phy, geo, alg)
+
+    
+    TYPE ( phy_Parameters ) :: phy
+
+    TYPE ( geo_Parameters ) :: geo
+
+    TYPE ( alg_Parameters ) :: alg
+    
+
+    INTEGER :: n, m
+
+      
+    !Initialize equivalent sources
+
+    mon_equiv_hor = 0.0d0
+    
+    dip_equiv_hor = 0.0d0
+    
+    mon_equiv_ver = 0.0d0 
+
+    dip_equiv_ver = 0.0d0
+
+
+    ! Loop over all Cells and obtain equivalent sources
+
+    DO n = 1, geo % N_col
+
+       DO m = 1, geo % N_row
+
+          
+          IF ( ASSOCIATED ( cellArray ( n, m ) % innerObstacle ) ) THEN
+          
+
+             CALL ObstacleToCellMap ( cellArray ( n, m ), proj_cell_hor, proj_cell_ver, x_hor, x_ver )        
+
+             CALL StoreEquivalentSourceAmplitude ( x_hor, mon_equiv_hor ( ( 2 * alg % N_src_hor ) * n + 1 : ( 2 * alg % N_src_hor ) * (n+1), m+1 : m+2 ) , alg % N_src_hor, 'H', 'M' )
+             
+             CALL StoreEquivalentSourceAmplitude ( x_hor, dip_equiv_hor ( ( 2 * alg % N_src_hor ) * n + 1 : ( 2 * alg % N_src_hor ) * (n+1), m+1 : m+2 ) , alg % N_src_hor, 'H', 'D' )
+          
+
+          END IF
+
+
+       END DO
+
+    END DO
+    
+
+!   Convolution of Horizontal Equivalent sources
+    
+   ! CALL directFFT ( fft_hor, mon_equiv_hor, 1 )
+
+   ! CALL directFFT ( fft_hor, dip_equiv_hor, 1 )
+
+   ! field_equiv_hor = mon_hor_ker_fft * mon_equiv_hor
+
+   ! field_equiv_hor = field_equiv_hor + dip_hor_ker_fft * dip_equiv_hor
+
+   ! CALL inverseFFT ( fft_hor, field_equiv_hor,1 )
+
+!   write(*,*) field_equiv_hor( 1, 1)
+
+    
+  END SUBROUTINE ForwardMap
+
+
+  SUBROUTINE TestEquivalentSources ( phy, geo, alg ) 
+
+
+    TYPE ( phy_Parameters ) :: phy
+
+    TYPE ( geo_Parameters ) :: geo
+
+    TYPE ( alg_Parameters ) :: alg
+
+
+    COMPLEX (8) :: field_1(1)
+
+    COMPLEX(8),DIMENSION(1) :: field_2
+    
+    REAL(8) :: tar_x, tar_y
+
+    REAL(8),DIMENSION(:),ALLOCATABLE :: src_x, src_y
+
+    INTEGER :: n, m, n_0, m_0
+    
+    COMPLEX(8), DIMENSION(:,:), ALLOCATABLE :: matrix
+
+    ALLOCATE ( matrix ( 1, alg % N_dis ) )
+    
+    ALLOCATE ( src_x ( 2 * alg % N_src_hor * ( geo % N_col + 2 ) ) )
+
+    ALLOCATE ( src_y ( geo % N_row + 3 ) )
+
+    
+    src_x = geo % L_x * (/ ( ( 2.0d0 * n + 1.0d0 ) / ( 4 * alg % N_src_hor ) - 0.5d0 , n = 0 , 2 * alg % N_src_hor * ( geo % N_col + 2 ) - 1 ) /)
+
+    src_y = geo % L_y * (/ ( m, m = 0, geo % N_row + 2 ) /) - geo % L_y / 2 
+
+
+    
+
+    m_0 = 1
+
+    tar_x = src_x (n_0)
+
+    tar_y = src_y (m_0)
+    
+
+    field_1 = 0.0d0
+
+     DO n = 1 , 2 * alg % N_src_hor * ( geo % N_col + 2 )
+
+        DO m = 1 , geo % N_row + 3 
+
+           IF ( n .NE. n_0 .OR. m .NE. m_0 ) THEN
+              
+              field_1 = field_1 + G_0 ( phy % k, tar_x - src_x (n), tar_y - src_y (m) ) * mon_equiv_hor ( n, m )
+
+              field_1 = field_1 + DG_0 ( phy % k, tar_x - src_x (n), tar_y - src_y (m), 0.0d0, 1.0d0 ) * dip_equiv_hor (n, m)
+
+           END IF
+
+        END DO
+
+     END DO
+
+   write(*,*) field_1
+
+
+    DO n = 1, geo % N_col
+
+       DO m = 1, geo % N_row
+
+          if (ASSOCIATED ( cellArray (m, n) % innerObstacle ) ) THEN
+             CALL createEvalFieldAtPointsMatrix ( matrix, cellArray ( m, n ) % innerObstacle, (/tar_x/), (/tar_y/), phy % k )
+          
+             CALL MatVecMultiply ( matrix, cellArray ( m, n ) % psi, field_2)
+
+             field_1 = field_1 - field_2
+
+          END IF
+
+       END DO
+
+    END DO
+
+    write(*,*) abs(field_1)
+
+
+  END SUBROUTINE TestEquivalentSources
+
+  
+  SUBROUTINE destroyForwardMap ()
+
+    
+    DEALLOCATE ( cellArray, obstacleArray ) 
+
+    DEALLOCATE ( psi, res )
+
+
+  END SUBROUTINE destroyForwardMap
+
+
+
+END MODULE

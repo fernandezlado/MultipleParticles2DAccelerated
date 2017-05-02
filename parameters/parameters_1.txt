@@ -1,0 +1,74 @@
+# --------------------------------------------------------------------------------------------------
+# PROGRAM PARAMETERS
+# EVERY LINE MUST BE COMMENTED WITH ##, EXCEPT THOSE CONTAINING ACTUAL VALUES
+# --------------------------------------------------------------------------------------------------
+#
+#
+# --------------------------------------------------------------------------------------------------
+# PHYSICAL PARAMETERS
+# --------------------------------------------------------------------------------------------------
+#
+# FORMAT EXPECTED
+#
+# k (wavenumber), angle (of incidence)
+# 
+# NOTE: in the program angle gets multiplied by Pi. Thus, angle \in [0,2). 
+# Values
+1.5,1.0
+#
+#
+# --------------------------------------------------------------------------------------------------
+# GEOMETRY PARAMETERS
+# --------------------------------------------------------------------------------------------------
+#
+# FORMAT EXPECTED
+#
+# Radius of circle
+# L_x (horizontal period), L_y (vertical period)
+# N_col (number of columns of array), N_row (number of rows of array)
+# N_def (Number of defects)
+# N_def lines containing the location of the defects with the expected format
+# Def_row, Def_col
+#
+# Values
+0.5
+2.0 2.0
+5 5
+16
+1,2
+1,4
+2,1
+2,2
+2,3
+2,4
+2,5
+3,2
+3,4
+4,1
+4,2
+4,3
+4,4
+4,5
+5,2
+5,4
+#
+#
+# --------------------------------------------------------------------------------------------------
+# ALGORITHM PARAMETERS
+# --------------------------------------------------------------------------------------------------
+#
+# FORMAT EXPECTED
+#
+# Number of horizontal equiv src on each cell, Number of vertical equiv src on each cell
+# Number of discretization points for the disks
+#
+# NOTE : the number of equiv. srcs and coll. points is the number of invariant groups of equiv 
+# sources and coll points. There are, in total, 4 * N_src and 4 * N_coll equiv. sources and
+# collocation points respectively.
+#
+# Values
+8 8
+32
+#
+# END OF FILE
+

@@ -1,0 +1,75 @@
+#2D ACCELERATOR MAKEFILE
+
+## VARIABLES DECLARATION ##
+
+
+#COMPILER
+FC=ifort
+
+
+#DIRECTORIES
+CURDIR=$(shell pwd)
+SRCDIR=src
+OBJDIR=obj
+MODDIR=mod
+BINDIR=bin
+
+
+#OBJECTS FILES TO COMPILE
+OBJ = $(CURDIR)/$(OBJDIR)/modObstacle.o $(CURDIR)/$(OBJDIR)/modOperators.o $(CURDIR)/$(OBJDIR)/modSpecialFunctions.o $(CURDIR)/$(OBJDIR)/modMathConstants.o $(CURDIR)/$(OBJDIR)/modFarInteractions.o $(CURDIR)/$(OBJDIR)/modLinearAlgebra.o $(CURDIR)/$(OBJDIR)/modReferenceCell.o $(CURDIR)/$(OBJDIR)/modCell.o $(CURDIR)/$(OBJDIR)/modForwardMap.o $(CURDIR)/$(OBJDIR)/modInterpolationReferenceCell.o $(OBJDIR)/modFFT.o $(OBJDIR)/mkl_dfti.o
+
+MAIN = $(CURDIR)/$(OBJDIR)/main.o
+
+#OUTPUT FILENAME
+fileOut=MultipleParticles
+
+
+output: $(MAIN) $(OBJ)
+	$(FC) -o $(CURDIR)/$(BINDIR)/$(fileOut) $(MAIN) $(OBJ) -mkl
+
+$(MAIN): $(CURDIR)/$(SRCDIR)/main.f90 $(OBJ)
+	$(FC) -c $(CURDIR)/$(SRCDIR)/main.f90 -o $(CURDIR)/$(OBJDIR)/main.o -module $(CURDIR)/$(MODDIR)
+
+$(CURDIR)/$(OBJDIR)/modObstacle.o: $(CURDIR)/$(SRCDIR)/modObstacle.f90 $(CURDIR)/$(OBJDIR)/modMathConstants.o
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modObstacle.f90 -o $(CURDIR)/$(OBJDIR)/modObstacle.o -module $(CURDIR)/$(MODDIR)
+
+$(CURDIR)/$(OBJDIR)/modOperators.o: $(CURDIR)/$(SRCDIR)/modOperators.f90 $(CURDIR)/$(OBJDIR)/modObstacle.o $(CURDIR)/$(OBJDIR)/modSpecialFunctions.o $(CURDIR)/$(OBJDIR)/modMathConstants.o $(CURDIR)/$(OBJDIR)/modLinearAlgebra.o
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modOperators.f90 -o $(CURDIR)/$(OBJDIR)/modOperators.o -module $(CURDIR)/$(MODDIR)
+
+$(CURDIR)/$(OBJDIR)/modSpecialFunctions.o: $(CURDIR)/$(SRCDIR)/modSpecialFunctions.f90 $(CURDIR)/$(OBJDIR)/modMathConstants.o
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modSpecialFunctions.f90 -o $(CURDIR)/$(OBJDIR)/modSpecialFunctions.o -module $(CURDIR)/$(MODDIR)
+
+$(CURDIR)/$(OBJDIR)/modMathConstants.o: $(CURDIR)/$(SRCDIR)/modMathConstants.f90
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modMathConstants.f90 -o $(CURDIR)/$(OBJDIR)/modMathConstants.o -module $(CURDIR)/$(MODDIR)
+
+$(CURDIR)/$(OBJDIR)/modFarInteractions.o: $(CURDIR)/$(SRCDIR)/modFarInteractions.f90 $(CURDIR)/$(OBJDIR)/modMathConstants.o $(CURDIR)/$(OBJDIR)/modObstacle.o $(CURDIR)/$(OBJDIR)/modSpecialFunctions.o $(CURDIR)/$(OBJDIR)/modLinearAlgebra.o
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modFarInteractions.f90 -o $(CURDIR)/$(OBJDIR)/modFarInteractions.o -module $(CURDIR)/$(MODDIR)
+
+$(CURDIR)/$(OBJDIR)/modLinearAlgebra.o: $(CURDIR)/$(SRCDIR)/modLinearAlgebra.f90 
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modLinearAlgebra.f90 -o $(CURDIR)/$(OBJDIR)/modLinearAlgebra.o -module $(CURDIR)/$(MODDIR) -mkl
+
+$(CURDIR)/$(OBJDIR)/modReferenceCell.o: $(CURDIR)/$(SRCDIR)/modReferenceCell.f90 $(CURDIR)/$(OBJDIR)/modSpecialFunctions.o
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modReferenceCell.f90 -o $(CURDIR)/$(OBJDIR)/modReferenceCell.o -module $(CURDIR)/$(MODDIR)
+
+$(CURDIR)/$(OBJDIR)/modCell.o: $(CURDIR)/$(SRCDIR)/modCell.f90 $(CURDIR)/$(OBJDIR)/modObstacle.o $(CURDIR)/$(OBJDIR)/modReferenceCell.o $(CURDIR)/$(OBJDIR)/modMathConstants.o $(CURDIR)/$(OBJDIR)/modInterpolationReferenceCell.o
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modCell.f90 -o $(CURDIR)/$(OBJDIR)/modCell.o -module $(CURDIR)/$(MODDIR) $(CURDIR)/$(OBJDIR)/modFarInteractions.o
+
+$(CURDIR)/$(OBJDIR)/modForwardMap.o: $(CURDIR)/$(SRCDIR)/modForwardMap.f90 $(CURDIR)/$(OBJDIR)/modCell.o $(CURDIR)/$(OBJDIR)/modReferenceCell.o 
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modForwardMap.f90 -o $(CURDIR)/$(OBJDIR)/modForwardMap.o -module $(CURDIR)/$(MODDIR)
+
+$(CURDIR)/$(OBJDIR)/modInterpolationReferenceCell.o: $(CURDIR)/$(SRCDIR)/modInterpolationReferenceCell.f90 $(CURDIR)/$(OBJDIR)/modLinearAlgebra.o $(CURDIR)/$(OBJDIR)/modMathConstants.o
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modInterpolationReferenceCell.f90 -o $(CURDIR)/$(OBJDIR)/modInterpolationReferenceCell.o -module $(CURDIR)/$(MODDIR)
+
+$(OBJDIR)/modFFT.o:  $(SRCDIR)/modFFT.f90 $(OBJDIR)/mkl_dfti.o
+	$(FC) -c $(CURDIR)/$(SRCDIR)/modFFT.f90 -o $(CURDIR)/$(OBJDIR)/modFFT.o -module $(CURDIR)/$(MODDIR)
+
+$(OBJDIR)/mkl_dfti.o: $(SRCDIR)/mkl_dfti.f90
+	$(FC) -c $(CURDIR)/$(SRCDIR)/mkl_dfti.f90 -o $(CURDIR)/$(OBJDIR)/mkl_dfti.o -module $(CURDIR)/$(MODDIR)
+
+clean:
+	rm $(CURDIR)/$(MODDIR)/*.mod
+	rm $(CURDIR)/$(OBJDIR)/*.o
+
+run:
+	./bin/$(fileOut)
+
