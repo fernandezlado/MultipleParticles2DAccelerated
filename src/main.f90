@@ -22,10 +22,41 @@ PROGRAM MultipleParticle
 
   CALL loadData ( phy, geo, alg )
 
+  write(*,*) "------------------------------"
+  
+  call cpu_time ( start )
+
   CALL initForwardMap ( phy, geo, alg )
+
+  call cpu_time ( finish )
+
+
+  write(*,*) "------------------------------"
+
+  write(*,*) "Array summary"
+
+  write(*,*) "------------------------------"
+  
+  write(*,*) geo % N_row, " rows,", geo % N_col, " cols." 
+
+  write(*,*) "------------------------------"
+
+  write(*,*) "Time elapsed: ", finish-start
+
+  write(*,*) "------------------------------"
+
+  write(*,*) " Compute Forward map"
+
+  write(*,*) "------------------------------"
+
+  call cpu_time ( start )
 
   CALL forwardMap ( phy, geo, alg )
   
+  call cpu_time ( finish )
+
+  write(*,*) "Time elapsed: ", finish-start
+
   CALL TestEquivalentSources ( phy, geo, alg ) 
 
   call destroyForwardMap()
