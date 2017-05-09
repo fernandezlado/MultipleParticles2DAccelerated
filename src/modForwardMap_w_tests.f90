@@ -12,28 +12,26 @@ module modForwardMap
 
 
 
-  IMPLICIT NONE
+  implicit none
 
-
-
-  type (FFT_2D) :: fft_hor_local, fft_ver_local
-
-  type (FFT_2D) :: fft_hor_global, fft_ver_global
 
   
   type (ProjectionReferenceCell) :: proj_cell_hor, proj_cell_ver
 
   type (InterpolationReferenceCell) :: interp_cell
 
+  complex(8),dimension(:),allocatable :: field_hor_coll, field_ver_coll
+
   complex(8),dimension(:),allocatable :: x_hor, x_ver, xi
 
-  
+ 
   type(Cell), dimension(:,:), allocatable :: cellArray
 
   type(Obstacle), dimension(:,:), target, allocatable :: obstacleArray
 
 
   complex(8),dimension(:,:,:),allocatable :: psi, res
+
 
 
   complex(8),dimension(:,:),allocatable :: mon_equiv_hor, mon_equiv_ver
@@ -43,13 +41,25 @@ module modForwardMap
   complex(8),dimension(:,:),allocatable :: local_hor, local_ver
 
   
-  complex(8),dimension(:,:),allocatable :: mon_hor_ker_global_fft, dip_hor_ker_global_fft
+  type (FFT_2D) :: fft_hor_local, fft_ver_local
 
-  complex(8),dimension(:,:),allocatable :: mon_ver_ker_global_fft, dip_ver_ker_global_fft
+  type (FFT_2D) :: fft_hor_global, fft_ver_global
 
-  complex(8),dimension(:,:),allocatable :: mon_hor_ker_local_fft, dip_hor_ker_local_fft
+  complex(8),dimension(:,:),allocatable :: mon_hor_ker_global_fft
 
-  complex(8),dimension(:,:),allocatable :: mon_ver_ker_local_fft, dip_ver_ker_local_fft
+  complex(8),dimension(:,:),allocatable :: dip_hor_ker_global_fft
+
+  complex(8),dimension(:,:),allocatable :: mon_ver_ker_global_fft
+  
+  complex(8),dimension(:,:),allocatable :: dip_ver_ker_global_fft
+
+  complex(8),dimension(:,:),allocatable :: mon_hor_ker_local_fft
+
+  complex(8),dimension(:,:),allocatable :: dip_hor_ker_local_fft
+
+  complex(8),dimension(:,:),allocatable :: mon_ver_ker_local_fft
+  
+  complex(8),dimension(:,:),allocatable :: dip_ver_ker_local_fft
 
 
   complex(8),dimension(:,:),allocatable,target :: field_equiv_hor, field_equiv_ver
@@ -64,7 +74,7 @@ module modForwardMap
 
 
 
-  private :: proj_cell_hor, proj_cell_ver, interp_cell
+!  private :: proj_cell_hor, proj_cell_ver, interp_cell
 
   private :: cellArray, obstacleArray
 
@@ -108,6 +118,7 @@ contains
 
     allocate ( res ( alg % N_dis, geo % N_row, geo % N_col) )
     
+
     psi = 1.0d0
 
     res = 1.0d0
@@ -154,14 +165,18 @@ contains
 
     ! Create x_hor, x_ver: solutions of least square problem to obtain equiv. sources
 
+    allocate ( field_hor_coll ( 1 : 4 * proj_cell_hor % N_coll ) )
+
+    allocate ( field_ver_coll ( 1 : 4 * proj_cell_ver % N_coll ) )
+
     allocate ( x_hor ( 2 * 4 * alg % N_src_hor ) )
 
     allocate ( x_ver ( 2 * 4 * alg % N_src_ver ) )
 
-    ! Create xi : solution of least square problem to expand field as sum of plane waves
+    ! Create xi : solution of least square problem to expand field as sum 
+    ! of plane waves
 
     allocate ( xi ( 4 * alg % N_wave) )
-
 
     ! --------------------------------------------------------------------------------
     !
@@ -430,33 +445,33 @@ contains
     integer :: n, m, l
 
 
-    do m = 0, geo % N_col + 1
+    do n = 0, geo % N_col + 1
 
-       do n = 0, geo % N_row + 1 
+       do m = 0, geo % N_row + 1 
 
 
-          if ( n >= 1 .AND. n <= geo % N_row .AND. m >= 1 .AND. m <= geo % N_col ) THEN
+          if ( m >= 1 .and. m <= geo % N_row .and. n >= 1 .and. n <= geo % N_col ) then
 
              call createObstacle ( &
-                  obstacleArray ( n, m ), &
-                  0, &
-                  (/ geo % radius, geo % L_x * m, geo % L_y * n /), &
+                  obstacleArray ( m, n ), &
+                  1, &
+                  (/ 0.5*geo % radius, geo % L_x * n, geo % L_y * m /), &
                   alg % N_dis )
  
-             obs_pointer => obstacleArray ( n, m )
+             obs_pointer => obstacleArray ( m, n )
 
-          ELSE 
+          else 
           
-             obs_pointer => NULL()
+             obs_pointer => null()
 
           end if
        
           call createCell ( &
-                  cellArray ( n, m ), &
-                  geo % L_x * m, &
-                  geo % L_y * n, &
+                  cellArray ( m, n ), &
+                  geo % L_x * n, &
+                  geo % L_y * m, &
                   obs_pointer, &
-                  psi (:, n, m), &
+                  psi (:, m, n), &
                   proj_cell_hor, &
                   proj_cell_ver, &
                   interp_cell, &
@@ -470,11 +485,11 @@ contains
 
     do l = 1, geo % N_def
 
-       n = geo % defects_location ( l, 1 )
+       m = geo % defects_location ( l, 1 )
         
-       m = geo % defects_location ( l, 2 )
+       n = geo % defects_location ( l, 2 )
 
-       NULLifY ( cellArray ( n, m ) % innerObstacle )
+       nullify ( cellArray ( m, n ) % innerObstacle )
 
     end do
 
@@ -489,11 +504,11 @@ contains
     ! pole_flag = 'M' or 'D' for monopole or dipole kernel
     
 
-    REAL(8) :: k
+    real(8) :: k
 
     integer :: N_row, N_col
 
-    REAL(8),dimension(:) :: step
+    real(8),dimension(:) :: step
 
     complex(8),dimension(:,:) :: mat_out
 
@@ -504,7 +519,7 @@ contains
     
     integer :: n, m
 
-    REAL(8),dimension(:),allocatable :: src_1, src_2
+    real(8),dimension(:),allocatable :: src_1, src_2
 
     complex(8),dimension(:,:),allocatable :: kernel
 
@@ -526,7 +541,7 @@ contains
     src_2 ( 1 * N_col + 1 : 2 * N_col ) = step(2) * (/ ( m, m = - N_col, -1 ) /)
 
 
-    if ( pole_flag == 'M' ) THEN
+    if ( pole_flag == 'M' ) then
 
 
           forall ( n = 1 : 2 * N_row, m = 1 : 2 * N_col )
@@ -536,7 +551,7 @@ contains
           end forall
 
 
-    ELSE
+    else
 
        
        forall ( n = 1 : 2 * N_row, m = 1 : 2 * N_col )
@@ -567,6 +582,7 @@ contains
   end subroutine computeKernelFFT
 
 
+
   subroutine StoreEquivalentSourceAmplitude ( x, weights, N_src, type_flag, pole_flag)
 
     ! Stores the values of the equivalent sources in weights.
@@ -586,14 +602,14 @@ contains
     CHARACTER :: type_flag, pole_flag
 
 
-    REAL(8) :: sgn
+    real(8) :: sgn
 
     complex(8),dimension(:),pointer :: x_1, x_2, x_3, x_4
 
     complex(8),dimension(:),pointer :: panel_1, panel_2, panel_3, panel_4
 
 
-    if ( pole_flag == 'M' ) THEN
+    if ( pole_flag == 'M' ) then
        
 
        x_1 => x ( 0 * N_src + 1 : 1 * N_src )
@@ -606,7 +622,7 @@ contains
 
        sgn = 1.0d0
 
-    ELSE 
+    else 
 
 
        x_1 => x ( 1 * N_src + 1 : 2 * N_src )
@@ -622,7 +638,7 @@ contains
     end if
 
 
-    if ( type_flag == 'H' ) THEN
+    if ( type_flag == 'H' ) then
        
 
        panel_1 => weights ( 1 * N_src + 1 : 2 * N_src, 2 )
@@ -634,7 +650,7 @@ contains
        panel_4 => weights ( 1 * N_src + 1 : 2 * N_src, 1 )
 
               
-    ELSE if ( type_flag == 'V' ) THEN
+    else if ( type_flag == 'V' ) then
 
 
        panel_1 => weights ( 0 * N_src + 1 : 1 * N_src, 2 )
@@ -658,9 +674,9 @@ contains
     panel_4 = panel_4 + sgn * x_4
 
 
-    NULLifY ( x_1, x_2, x_3, x_4 )
+    nullify ( x_1, x_2, x_3, x_4 )
 
-    NULLifY ( panel_1, panel_2, panel_3, panel_4 )
+    nullify ( panel_1, panel_2, panel_3, panel_4 )
 
 
   end subroutine StoreEquivalentSourceAmplitude
@@ -733,6 +749,7 @@ contains
   end subroutine PermuteCellField
 
 
+
   subroutine ObstacleToCellMap ( cell_mn, refCell_hor, refCell_ver, x_h, x_v )
 
     ! Computes the horizontal and vertical equivalent sources of the mn-th cell
@@ -745,23 +762,12 @@ contains
 
     complex(8),dimension(:) :: x_h, x_v
 
-    
-    complex(8),dimension(:),allocatable :: field_at_hor_coll, field_at_ver_coll
-    
-    
-    allocate ( field_at_hor_coll ( 1 : 4 * refCell_hor % N_coll ) )
 
-    allocate ( field_at_ver_coll ( 1 : 4 * refCell_ver % N_coll ) )
+    call computeFieldInCollocationPoints ( cell_mn, field_hor_coll, field_ver_coll )
 
+    call computeEquivalentSourceAmplitude ( refCell_hor, field_hor_coll, x_h)
 
-    call computeFieldInCollocationPoints ( cell_mn, field_at_hor_coll, field_at_ver_coll )
-
-    call computeEquivalentSourceAmplitude ( refCell_hor, field_at_hor_coll, x_h)
-
-    call computeEquivalentSourceAmplitude ( refCell_ver, field_at_ver_coll, x_v)
-
-    
-    deallocate ( field_at_hor_coll, field_at_ver_coll )
+    call computeEquivalentSourceAmplitude ( refCell_ver, field_ver_coll, x_v)
 
 
   end subroutine ObstacleToCellMap
@@ -777,7 +783,7 @@ contains
 
     complex(8),dimension(:) :: res
 
-    
+
     call computePlaneWaveWeights ( interp_cell, field, xi )
 
     call MatVecMultiply ( cell_mn % cellToObsMatrix, xi, res )
@@ -825,51 +831,52 @@ contains
     ! --------------------------------------------------------------------------------
 
 
-    do m = 1, geo % N_row
+    do n = 1, geo % N_col
 
-       do n = 1, geo % N_col
+       do m = 1, geo % N_row
 
-          
-          if ( ASSOCIATED ( cellArray ( n, m ) % innerObstacle ) ) THEN
-          
+
+          if ( associated ( cellArray ( m, n ) % innerObstacle ) ) then
+
 
              call ObstacleToCellMap ( &
-                  cellArray ( n, m ), &
+                  cellArray ( m, n ), &
                   proj_cell_hor, &
-                  proj_cell_ver, x_hor, &
+                  proj_cell_ver, &
+                  x_hor, &
                   x_ver )        
 
-             ! Store Cell's equivalent horizontal sources
-             
-             Left_ind  = ( 2 * alg % N_src_hor ) * n + 1
-
-             Right_ind = ( 2 * alg % N_src_hor ) * ( n + 1 )
-
+             ! Store Cell's equivalent horizontal sources            
 
              call StoreEquivalentSourceAmplitude ( &
                   x_hor, &
-                  cellArray ( n, m ) % mon_equiv_hor, &
+                  cellArray ( m, n ) % mon_equiv_hor, &
                   alg % N_src_hor, &
                   'H', &
                   'M' )
              
              call StoreEquivalentSourceAmplitude ( &
                   x_hor, &
-                  cellArray ( n, m ) % dip_equiv_hor &
-                  , alg % N_src_hor, &
+                  cellArray ( m, n ) % dip_equiv_hor, &
+                  alg % N_src_hor, &
                   'H', &
                   'D' )
 
 
              !! Add to global sources
 
+             Left_ind  = ( 2 * alg % N_src_hor ) * n + 1
+
+             Right_ind = ( 2 * alg % N_src_hor ) * ( n + 1 )
+
+
              mon_equiv_hor ( Left_ind : Right_ind, m + 1 : m + 2 ) = &
                   mon_equiv_hor ( Left_ind : Right_ind, m + 1 : m + 2 ) + &
-                  cellArray ( n, m ) % mon_equiv_hor
+                  cellArray ( m, n ) % mon_equiv_hor
 
              dip_equiv_hor ( Left_ind : Right_ind, m + 1 : m + 2 ) = &
                   dip_equiv_hor ( Left_ind : Right_ind, m + 1 : m + 2 ) + &
-                  cellArray ( n, m ) % dip_equiv_hor
+                  cellArray ( m, n ) % dip_equiv_hor
 
              
           
@@ -883,14 +890,14 @@ contains
 
              call StoreEquivalentSourceAmplitude ( &
                   x_ver, &
-                  cellArray ( n, m ) % mon_equiv_ver, &
+                  cellArray ( m, n ) % mon_equiv_ver, &
                   alg % N_src_ver, &
                   'V', &
                   'M' )
              
              call StoreEquivalentSourceAmplitude ( &
                   x_ver, &
-                  cellArray ( n, m ) % dip_equiv_ver, &
+                  cellArray ( m, n ) % dip_equiv_ver, &
                   alg % N_src_ver, &
                   'V', &
                   'D' )
@@ -899,11 +906,11 @@ contains
 
              mon_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 ) = &
                   mon_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 ) + &
-                  cellArray ( n, m ) % mon_equiv_ver
+                  cellArray ( m, n ) % mon_equiv_ver
 
              dip_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 ) = &
                   dip_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 ) + &
-                  cellArray ( n, m ) % dip_equiv_ver
+                  cellArray ( m, n ) % dip_equiv_ver
 
 
           end if
@@ -977,11 +984,10 @@ contains
     ! --------------------------------------------------------------------------------
 
 
-    do m = 1, geo % N_row
-
-
-       do n = 1, geo % N_col
-          
+    do n = 1, geo % N_col
+       
+       do m = 1, geo % N_row
+             
           ! Horizontal sources
 
           N_s = 2 * alg % N_src_hor
@@ -991,16 +997,26 @@ contains
           Right_ind = N_s * ( n + 1 )
 
 
-          !! Monopoles 
+          cellArray ( m, n ) % field_equiv_hor = &
+               field_equiv_hor ( Left_ind : Right_ind, m + 1 : m + 2 )
+
+
+          ! !! Monopoles 
 
           local_hor = 0.0d0
 
-          do n_h = 1, 3
-             do n_v = 1, 3
-                local_hor  ( (n_h-1)*N_s + 1 : n_h * N_s, n_v : n_v+1 ) = local_hor ( (n_h-1)*N_s + 1 : n_h * N_s, n_v:n_v+1 ) +&
-                     cellArray ( n + n_h - 2, m + n_v - 2 ) % mon_equiv_hor 
+          do n_v = 1, 3
+
+             do n_h = 1, 3
+
+                local_hor  ( ( n_h - 1 ) * N_s + 1 : n_h * N_s, n_v : n_v + 1 ) = &
+                     local_hor ( ( n_h - 1 ) * N_s + 1 : n_h * N_s, n_v : n_v + 1 ) + &
+                     cellArray ( m + n_v - 2, n + n_h - 2 ) % mon_equiv_hor 
+
              end do
+
           end do 
+
 
           call computeEquivalentField_FFT ( &
                local_hor, &
@@ -1009,20 +1025,27 @@ contains
                fft_hor_local )
 
           
-          cellArray ( n, m ) % field_equiv_hor = &
-               field_equiv_hor ( Left_ind : Right_ind, m + 1 : m + 2 ) - &
+          cellArray ( m, n ) % field_equiv_hor = &
+               cellArray ( m, n ) % field_equiv_hor - &
                aux_local_hor ( N_s + 1 : 2 * N_s, 2 : 3)
           
+
           !! Dipoles
 
           local_hor = 0.0d0
 
-          do n_h = 1, 3
-             do n_v = 1, 3
-                local_hor  ( (n_h-1)*N_s + 1 : n_h * N_s, n_v:n_v+1 ) = local_hor ( (n_h-1)*N_s + 1 : n_h * N_s, n_v:n_v+1 ) +&
-                     cellArray ( n + n_h - 2, m + n_v - 2 ) % dip_equiv_hor 
+          do n_v = 1, 3
+
+             do n_h = 1, 3
+
+                local_hor ( ( n_h - 1 ) * N_s + 1 : n_h * N_s, n_v : n_v + 1 ) = &
+                     local_hor ( ( n_h - 1 ) * N_s + 1 : n_h * N_s, n_v : n_v + 1 ) + &
+                     cellArray ( m + n_v - 2, n + n_h - 2 ) % dip_equiv_hor 
+
              end do
+
           end do 
+
 
           call computeEquivalentField_FFT ( &
                local_hor, &
@@ -1030,11 +1053,12 @@ contains
                aux_local_hor, &
                fft_hor_local )
 
-          cellArray ( n, m ) % field_equiv_hor = cellArray ( n, m ) % field_equiv_hor - & 
-               aux_local_hor ( N_s+1 : 2*N_s, 2 : 3)
+          cellArray ( m, n ) % field_equiv_hor = & 
+               cellArray ( m, n ) % field_equiv_hor - & 
+               aux_local_hor ( N_s + 1 : 2 * N_s, 2 : 3)
 
 
-          ! Vertical sources
+          !! Vertical sources
 
           N_s = 2 * alg % N_src_ver
 
@@ -1042,6 +1066,9 @@ contains
           
           Right_ind = N_s * ( m + 1 ) 
 
+
+          cellArray ( m, n ) % field_equiv_ver = &
+               field_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 )
 
           !! Monopoles 
 
@@ -1051,9 +1078,9 @@ contains
 
              do n_v = 1, 3
 
-                local_ver ( (n_h-1) * N_s + 1 : n_h * N_s, n_v : n_v + 1 ) = &
-                     local_ver ( (n_h-1) * N_s + 1 : n_h * N_s, n_v : n_v + 1 ) + &
-                     cellArray ( n + n_h - 2 , m + n_v - 2 ) % mon_equiv_ver
+                local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) = &
+                     local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) + &
+                     cellArray ( m + n_v - 2, n + n_h - 2 ) % mon_equiv_ver
 
              end do
 
@@ -1067,22 +1094,22 @@ contains
                fft_ver_local )
 
 
-          field_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 ) = &
-               field_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 ) - &
-               aux_local_ver ( N_s + 1 : 2 * N_s, 2 : 3)
+          cellArray ( m, n ) % field_equiv_ver      = &
+               cellArray ( m, n ) % field_equiv_ver - &
+               aux_local_ver ( N_s + 1 : 2 * N_s, 2 : 3 )
 
           
           !! Dipoles
 
           local_ver = 0.0d0
-
+          
           do n_h = 1, 3
 
              do n_v = 1, 3
 
-                local_ver ( (n_h-1) * N_s + 1 : n_h * N_s, n_v : n_v + 1 ) = &
-                     local_ver ( (n_h-1) * N_s + 1 : n_h * N_s, n_v : n_v + 1 ) + &
-                     cellArray ( n + n_h - 2 , m + n_v - 2 ) % dip_equiv_ver
+                local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) = &
+                     local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) + &
+                     cellArray ( m + n_v - 2, n + n_h - 2 ) % dip_equiv_ver
 
              end do
 
@@ -1095,9 +1122,9 @@ contains
                aux_local_ver, &
                fft_ver_local )
 
-          field_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 ) = &
-               field_equiv_ver ( Left_ind : Right_ind, n + 1 : n + 2 ) - &
-               aux_local_ver( N_s + 1 : 2 * N_s, 2 : 3)
+          cellArray ( m, n ) % field_equiv_ver      = &
+               cellArray ( m, n ) % field_equiv_ver - &
+               aux_local_ver ( N_s + 1 : 2 * N_s, 2 : 3 )
 
           
        end do
@@ -1112,36 +1139,188 @@ contains
     !
     ! --------------------------------------------------------------------------------
 
-    ! do m = 1, geo % N_row
 
-
-    !    do n = 1, geo % N_col
+    do n = 1, geo % N_col
+          
+       do m = 1, geo % N_row
 
           
-    !       if ( ASSOCIATED ( cellArray ( n, m ) % innerObstacle ) ) THEN
+          if ( associated ( cellArray ( m, n ) % innerObstacle ) ) then
 
              
-    !          field_hor => field_equiv_hor ( ( 2 * alg % N_src_hor ) * n + 1 : ( 2 * alg % N_src_hor ) * (n+1), m+1 : m+2 )
-
-    !          field_ver => field_equiv_ver ( ( 2 * alg % N_src_ver ) * m + 1 : ( 2 * alg % N_src_ver ) * (m+1), n+1 : n+2 )
+             call PermuteCellField ( &
+                  cellArray ( m, n ) % field_equiv_hor, &
+                  cellArray ( m, n ) % field_equiv_ver, &
+                  alg % N_src_hor, &
+                  alg % N_src_ver )
              
-    !          call PermuteCellField ( field_hor, field_ver, alg % N_src_hor, alg % N_src_ver )
-
-    !          call CellToObstacleMap ( cellArray (m,n) , field_permuted, res ( :, m, n ) )
              
-    !       end if
+            call CellToObstacleMap ( &
+                 cellArray (m,n), &
+                 field_permuted, &
+                 res ( :, m, n ) )
+
+             
+          end if
 
 
-    !    end do
+       end do
 
 
-    ! end do
+    end do
     
 
     
   end subroutine ForwardMap
 
 
+
+  subroutine TestFieldPermuted ( phy, geo, alg )
+
+    type ( phy_Parameters ) :: phy
+
+    type ( geo_Parameters ) :: geo
+
+    type ( alg_Parameters ) :: alg
+
+
+    real(8),dimension(:),allocatable :: tar_x, tar_y
+
+    complex(8),dimension(:),allocatable :: rhs, x
+
+    complex(8),dimension(:,:),allocatable :: mat
+
+    integer :: N_src
+
+
+    N_src = alg % N_src_hor + alg % N_src_ver
+
+
+    allocate ( mat ( 4 * N_src, alg % N_dis ) )
+
+    allocate ( rhs( 4 * N_src) )
+
+    allocate ( tar_x ( 4 * N_src ) )
+
+    allocate ( tar_y ( 4 * N_src ) )
+
+
+    tar_x ( 0 * N_src + 1 : 1 * N_src ) = interp_cell % src_x
+
+    tar_y ( 0 * N_src + 1 : 1 * N_src ) = interp_cell % src_y
+
+
+    tar_x ( 1 * N_src + 1 : 2 * N_src ) =-interp_cell % src_x
+
+    tar_y ( 1 * N_src + 1 : 2 * N_src ) = interp_cell % src_y
+
+
+    tar_x ( 2 * N_src + 1 : 3 * N_src ) =-interp_cell % src_x
+
+    tar_y ( 2 * N_src + 1 : 3 * N_src ) =-interp_cell % src_y
+
+
+    tar_x ( 3 * N_src + 1 : 4 * N_src ) = interp_cell % src_x
+
+    tar_y ( 3 * N_src + 1 : 4 * N_src ) =-interp_cell % src_y
+
+
+    tar_x = tar_x + geo % L_x
+
+    tar_y = tar_y + geo % L_y
+
+
+    CALL createEvalFieldAtPointsMatrix ( mat, cellArray (1, 3) % innerObstacle, tar_x, tar_y, phy % k)
+
+
+
+    CALL MatVecMultiply ( mat, cellArray(1,3) % psi, rhs )
+    
+    
+    write(*,*) maxval ( abs ( rhs - field_permuted ) )
+
+
+  end subroutine TestFieldPermuted
+
+
+
+  subroutine TestForwardMap ( phy, geo, alg )
+
+
+    type ( phy_Parameters ) :: phy
+
+    type ( geo_Parameters ) :: geo
+
+    type ( alg_Parameters ) :: alg
+
+
+    integer :: m, n
+
+    integer :: m_cell, n_cell
+
+
+    complex(8),dimension(:),allocatable :: field_1, field_2
+
+    complex(8),dimension(:,:),allocatable :: matrix
+
+
+    allocate ( field_1 ( alg % N_dis ) )
+
+    allocate ( field_2 ( alg % N_dis ) )
+
+    allocate ( matrix ( alg % N_dis, alg % N_dis ) )
+
+
+
+    write(*,*) "-----------------------------------------------------------------------"    
+
+    write(*,*) "Max. absolut error between field produced with plane waves and real field"
+    
+    write(*,*) "-----------------------------------------------------------------------"
+
+
+    do n_cell = 1, geo % N_col
+
+    do m_cell = 1, geo % N_row
+
+       field_1 = 0.0d0
+
+       do n = 1, geo % N_col
+
+          do m = 1, geo % N_row
+
+             if ( abs ( n - n_cell) > 1 .OR. abs ( m - m_cell ) > 1 ) then
+
+                if (associated ( cellArray (m, n) % innerObstacle ) ) then
+
+                   call createEvalFieldAtPointsMatrix ( &
+                        matrix, &
+                        cellArray ( m, n ) % innerObstacle, &
+                        cellArray ( m_cell, n_cell) % innerObstacle % C_x, &
+                        cellArray ( m_cell, n_cell) % innerObstacle % C_y, &
+                        phy % k )
+
+                   call MatVecMultiply ( matrix, cellArray ( m, n ) % psi, field_2)
+
+                   field_1 = field_1 + field_2
+
+                end if
+
+             end if
+
+          end do
+
+       end do
+       
+       write ( *, * ) maxval ( abs ( field_1 - res(:,m_cell,n_cell) ) )
+
+    end do
+
+    end do
+  
+  write(*,*) "-----------------------------------------------------------------------"
+
+  end subroutine TestForwardMap
 
 !   subroutine TestEquivalentSources ( phy, geo, alg ) 
 
@@ -1157,9 +1336,9 @@ contains
 
 !     complex(8),dimension(1) :: field_2
     
-!     REAL(8) :: tar_x, tar_y
+!     real(8) :: tar_x, tar_y
 
-!     REAL(8),dimension(:),allocatable :: src_x, src_y
+!     real(8),dimension(:),allocatable :: src_x, src_y
 
 !     integer :: n, m, n_0, m_0
     
@@ -1177,10 +1356,9 @@ contains
 
 !     src_x = geo % L_x * (/ ( m, m = 0, geo % N_col + 2 ) /) - geo % L_x / 2 
 
+!     do m_0 = 1, geo % N_col + 3
 
-!     n_0 = 1
-
-!     m_0 = 1
+!        do n_0 = 1 , 2 * alg % N_src_ver * ( geo % N_row + 2 )
 
 !     tar_x = src_x (m_0)
 
@@ -1194,7 +1372,7 @@ contains
 
 !        do n = 1 , 2 * alg % N_src_ver * ( geo % N_row + 2 )
         
-!            if ( n .NE. n_0 .OR. m .NE. m_0 ) THEN
+!            if ( n .NE. n_0 .OR. m .NE. m_0 ) then
               
 !               field_1 = field_1 + G_0 ( phy % k, tar_x - src_x (m), tar_y - src_y (n) ) * mon_equiv_ver ( n, m )
 
@@ -1206,16 +1384,19 @@ contains
 
 !      end do
 
-!    write(*,*) field_1
+!    write(*,*) abs ( field_1 - field_equiv_ver ( n_0, m_0 ) )
 
+! end do
 
+! end do
+ 
 
 
 !   do m = 1, geo % N_row
 
 !      do n = 1, geo % N_col
 
-!           if (ASSOCIATED ( cellArray (m, n) % innerObstacle ) ) THEN
+!           if (associated ( cellArray (m, n) % innerObstacle ) ) then
           
 !              call createEvalFieldAtPointsMatrix ( matrix, cellArray ( m, n ) % innerObstacle, (/tar_x/), (/tar_y/), phy % k )
           
@@ -1234,7 +1415,7 @@ contains
 !    write(*,*) abs ( field_1 )
 
 
-!   end subroutine TestEquivalentSources
+  ! end subroutine TestEquivalentSources
 
 
 
@@ -1253,9 +1434,9 @@ contains
 
  !    complex(8),dimension(1) :: field_2
     
- !    REAL(8) :: tar_x, tar_y
+ !    real(8) :: tar_x, tar_y
 
- !    REAL(8),dimension(:),allocatable :: src_x, src_y
+ !    real(8),dimension(:),allocatable :: src_x, src_y
 
  !    integer :: n, m, n_0, m_0, N_s
 
@@ -1304,7 +1485,7 @@ contains
 
  !    !    do m = 1 , geo % N_row + 3 
 
- !    !       if ( n .NE. n_0 .OR. m .NE. m_0 ) THEN
+ !    !       if ( n .NE. n_0 .OR. m .NE. m_0 ) then
 
  !    !          field_1 = field_1 + G_0 ( phy % k, tar_x - src_x (n), tar_y - src_y (m) ) * mon_equiv_hor ( n, m )
 
@@ -1321,7 +1502,7 @@ contains
 
  !    !    do m = 1, 2
 
- !    !       if ( n .NE. n_point .OR. m .NE. m_point ) THEN
+ !    !       if ( n .NE. n_point .OR. m .NE. m_point ) then
 
  !    !          field_1 = field_1 - G_0 ( phy % k, tar_x - src_x (n + n_cell * N_s), tar_y - src_y (m+m_cell) ) * cellArray ( n_cell, m_cell ) % mon_equiv_hor ( n, m )
 
@@ -1341,9 +1522,9 @@ contains
 
  !       do m = 1, geo % N_row
 
- !          if ( abs(n- n_cell)>1 .OR. abs(m- m_cell ) > 1 ) THEN
+ !          if ( abs(n- n_cell)>1 .OR. abs(m- m_cell ) > 1 ) then
 
- !             if (ASSOCIATED ( cellArray (m, n) % innerObstacle ) ) THEN
+ !             if (associated ( cellArray (m, n) % innerObstacle ) ) then
 
  !                call createEvalFieldAtPointsMatrix ( matrix, cellArray ( m, n ) % innerObstacle, (/tar_x/), (/tar_y/), phy % k )
           
@@ -1380,9 +1561,9 @@ contains
 
     complex(8),dimension(1) :: field_2
     
-    REAL(8) :: tar_x, tar_y
+    real(8) :: tar_x, tar_y
 
-    REAL(8),dimension(:),allocatable :: src_x, src_y
+    real(8),dimension(:),allocatable :: src_x, src_y
 
     integer :: n, m, n_0, m_0, N_s
 
@@ -1405,13 +1586,19 @@ contains
     src_y = geo % L_y * (/ ( m, m = 0, geo % N_row + 2 ) /) - geo % L_y / 2 
 
 
-    n_cell = 1
+    write(*,*) "-----------------------------------------------------------------------"    
+    write(*,*) "Max. absoulte error between field produced with equiv. src and real field"
+    
+    write(*,*) "-----------------------------------------------------------------------"
 
-    m_cell = 1
 
-    n_point = 3
+    do m_cell = 1, geo % N_row
 
-    m_point = 2
+    do n_cell = 1, geo % N_col
+
+    do m_point = 1,2
+
+    do n_point = 1, N_s
 
     n_0 = n_cell * N_s + n_point
 
@@ -1424,14 +1611,15 @@ contains
     
 
     field_1 = 0.0d0
+  
 
     do n = 1, geo % N_col
-
+       
        do m = 1, geo % N_row
 
-          if ( abs(n- n_cell)>1 .OR. abs(m- m_cell ) > 1 ) THEN
+          if ( abs ( n - n_cell) > 1 .OR. abs ( m - m_cell ) > 1 ) then
 
-             if (ASSOCIATED ( cellArray (m, n) % innerObstacle ) ) THEN
+             if (associated ( cellArray (m, n) % innerObstacle ) ) then
 
                 call createEvalFieldAtPointsMatrix ( matrix, cellArray ( m, n ) % innerObstacle, (/tar_x/), (/tar_y/), phy % k )
           
@@ -1447,10 +1635,216 @@ contains
 
     end do
 
+    write(*,*) abs(cellArray(m_cell, n_cell) % field_equiv_hor (n_point, m_point)- field_1)
 
-    write(*,*) abs(cellArray(n_cell, m_cell) % field_equiv_hor (n_point, m_point)- field_1)
+    ! write (*,*) abs ( field_equiv_hor (m_0, n_0) - field_1 )
 
+    end do
+
+    end do
+
+    end do
+
+    end do
+  
+    write(*,*) "Max error field evaluated with equiv. sources"
+
+    write(*,*) "-----------------------------------------------------------------------"
  end subroutine TestEquivalentSources 
+
+
+
+ !  subroutine TestEquivalentSources ( phy, geo, alg ) 
+
+
+ !    type ( phy_Parameters ) :: phy
+
+ !    type ( geo_Parameters ) :: geo
+
+ !    type ( alg_Parameters ) :: alg
+
+
+ !    complex (8) :: field_1(1)
+
+ !    complex(8),dimension(1) :: field_2
+    
+ !    real(8) :: tar_x, tar_y
+
+ !    real(8),dimension(:),allocatable :: src_x, src_y
+
+ !    integer :: n, m, n_0, m_0, N_s
+
+ !    integer :: n_cell, m_cell, n_point, m_point
+    
+ !    complex(8), dimension(:,:), allocatable :: matrix
+
+
+ !    N_s = 2 * alg % N_src_hor
+
+ !    allocate ( matrix ( 1, alg % N_dis ) )
+    
+ !    allocate ( src_y ( N_s * ( geo % N_row + 2 ) ) )
+
+ !    allocate ( src_x ( geo % N_col + 3 ) )
+
+    
+ !    src_y = geo % L_y * (/ ( ( 2.0d0 * n + 1.0d0 ) / ( 2 * N_s ) - 0.5d0 , n = 0 , 2 * N_s * ( geo % N_row + 2 ) - 1 ) /)
+
+ !    src_x = geo % L_x * (/ ( m, m = 0, geo % N_col + 2 ) /) - geo % L_x / 2 
+
+
+ !    do m_cell = 1, 1 !geo % N_row
+ 
+ !    do n_cell = 1, 1 !geo % N_col
+
+ !    do n_point = 1,2
+
+ !    do m_point = 1, N_s
+
+ !    m_0 = m_cell * N_s + m_point
+
+ !    n_0 = n_cell + n_point
+
+    
+ !    tar_x = src_x (n_0)
+
+ !    tar_y = src_y (m_0)
+    
+
+ !    field_1 = 0.0d0
+
+
+ !    do n = 1, geo % N_col
+       
+ !       do m = 1, geo % N_row
+
+ !          if ( abs ( n - n_cell) > 1 .OR. abs ( m - m_cell ) > 1 ) then
+
+ !             if (associated ( cellArray (m, n) % innerObstacle ) ) then
+
+ !                call createEvalFieldAtPointsMatrix ( matrix, cellArray ( m, n ) % innerObstacle, (/tar_x/), (/tar_y/), phy % k )
+          
+ !                call MatVecMultiply ( matrix, cellArray ( m, n ) % psi, field_2)
+
+ !                field_1 = field_1 + field_2
+
+ !             end if
+
+ !          end if
+
+ !       end do
+
+ !    end do
+
+
+ !    write(*,*) abs(cellArray(m_cell, n_cell) % field_equiv_ver (m_point, n_point)- field_1)
+
+
+ !    end do
+
+ !    end do
+
+ !    end do
+
+ !    end do
+
+ ! end subroutine TestEquivalentSources 
+
+
+
+
+ !  subroutine TestEquivalentSources ( phy, geo, alg ) 
+
+
+ !    type ( phy_Parameters ) :: phy
+
+ !    type ( geo_Parameters ) :: geo
+
+ !    type ( alg_Parameters ) :: alg
+
+
+ !    complex (8) :: field_1(1)
+
+ !    complex(8),dimension(1) :: field_2
+    
+ !    real(8) :: tar_x, tar_y
+
+ !    real(8),dimension(:),allocatable :: src_x, src_y
+
+ !    integer :: n, m, n_0, m_0, N_s
+
+ !    integer :: row_cell, col_cell, n_point, m_point
+    
+ !    complex(8), dimension(:,:), allocatable :: matrix
+
+
+ !    N_s = 2 * alg % N_src_ver
+
+ !    allocate ( matrix ( 1, alg % N_dis ) )
+    
+ !    allocate ( src_y ( N_s * ( geo % N_row + 2 ) ) )
+
+ !    allocate ( src_x ( geo % N_col + 3 ) )
+
+    
+ !    src_y = geo % L_y * (/ ( ( 2.0d0 * n + 1.0d0 ) / ( 2 * N_s ) - 0.50d0, n = 0, N_s * (geo % N_row + 2) - 1 ) /)
+
+ !    src_x = geo % L_x * (/ (m, m = 0, geo % N_col + 2 ) /) - geo % L_x / 2.0d0
+
+    
+ !    row_cell = 1
+
+ !    col_cell = 2
+
+ !    do m_point = 1, 2
+    
+ !       do n_point = 1, N_s
+
+ !          n_0 = row_cell * N_s + n_point
+
+ !          m_0 = col_cell + m_point
+
+
+ !          tar_x = src_x ( m_0 )
+
+ !          tar_y = src_y ( n_0 )
+
+
+
+
+ !          field_1 = 0.0d0
+
+ !          do n = 1, geo % N_row
+
+ !             do m = 1, geo % N_col
+
+ !                if ( abs ( m - row_cell ) > 1 .OR. abs ( n - col_cell ) > 1 ) then
+
+ !                   if ( associated ( cellArray ( m, n ) % innerObstacle ) ) then
+
+ !                      call createEvalFieldAtPointsMatrix ( matrix, cellArray ( m, n ) % innerObstacle, (/tar_x/), (/ tar_y /), phy % k )
+
+ !                      call MatVecMultiply ( matrix, cellArray ( m, n ) % psi, field_2 )
+
+ !                      field_1 = field_1 + field_2
+
+ !                   end if
+
+ !                end if
+
+ !             end do
+
+ !          end do
+
+
+
+ !          write (*,*) abs ( field_1 - cellArray ( row_cell, col_cell ) % field_equiv_ver ( n_point, m_point ) )
+
+ !       end do
+
+ !    end do
+
+ ! end subroutine TestEquivalentSources 
 
 
 !   subroutine TestEquivalentSources ( phy, geo, alg ) 
@@ -1467,9 +1861,9 @@ contains
 
 !     complex(8),dimension(1) :: field_2
     
-!     REAL(8) :: tar_x, tar_y
+!     real(8) :: tar_x, tar_y
 
-!     REAL(8),dimension(:),allocatable :: src_x, src_y
+!     real(8),dimension(:),allocatable :: src_x, src_y
 
 !     integer :: n, m, n_0, m_0, N_s
 
@@ -1492,13 +1886,13 @@ contains
 !     src_x = geo % L_x * (/ ( m, m = 0, geo % N_col + 2 ) /) - geo % L_x / 2 
 
 
-!     n_cell = 1
+!     n_cell = 3
 
 !     m_cell = 1
 
 !     n_point = 1
 
-!     m_point = 1
+!     m_point = 2
 
 !     n_0 = n_cell * N_s + n_point
 
@@ -1510,38 +1904,58 @@ contains
 !     tar_y = src_y (n_0)
     
 
-!     field_1 = 0.0d0
+
 
 
 !     ! GLOBAL CONVOLUTION
-
-
-!     do m = 1 , geo % N_col + 3 
-
-!        do n = 1 , N_s * ( geo % N_row + 2 )
+! !    do m_0 = 1 , geo % N_col + 3 
+       
+! !       do n_0 = 1, N_s * ( geo % N_row + 2 )
           
-!           if ( n .NE. n_0 .OR. m .NE. m_0 ) THEN
+!           tar_x = src_x (m_0)
 
-!              field_1 = field_1 + G_0 ( phy % k, tar_x - src_x (m), tar_y - src_y (n) ) * mon_equiv_ver ( n, m )
+!           tar_y = src_y (n_0)
 
-!              field_1 = field_1 + DG_0 ( phy % k, tar_x - src_x (m), tar_y - src_y (n), 1.0d0, 0.0d0 ) * dip_equiv_ver (n, m)
+!           field_1 = 0.0d0
 
-!           end if
+!           do m = 1 , geo % N_col + 3 
 
-!        end do
+!              do n = 1 , N_s * ( geo % N_row + 2 )
+          
+!                 if ( n .NE. n_0 .OR. m .NE. m_0 ) then
 
-!     end do
-!     write(*,*) field_1
+!                    field_1 = field_1 + G_0 ( phy % k, tar_x - src_x (m), tar_y - src_y (n) ) * mon_equiv_ver ( n, m )
+
+!                    field_1 = field_1 + DG_0 ( phy % k, tar_x - src_x (m), tar_y - src_y (n), 1.0d0, 0.0d0 ) * dip_equiv_ver (n, m)
+                   
+!                 end if
+
+!              end do
+
+
+!           end do
+
+! ! end do
+
+! ! end do
+
+
+
 !     ! LOCAL CONVOLUTION
+
 !     do n = 1,  N_s
 
 !        do m = 1, 2
 
-!           if ( n .NE. n_point .OR. m .NE. m_point ) THEN
+!           if ( n .NE. n_point .OR. m .NE. m_point ) then
 
-!              field_1 = field_1 - G_0 ( phy % k, tar_x - src_x (m + m_cell ), tar_y - src_y (n + n_cell* N_s) ) * cellArray ( m_cell, n_cell ) % mon_equiv_ver ( n, m )
+!              n_0 = n + n_cell *  N_s
 
-!              field_1 = field_1 - DG_0 ( phy % k, tar_x - src_x (m + m_cell ), tar_y - src_y (n + n_cell * N_s), 1.0d0, 0.0d0 ) * cellArray ( m_cell, n_cell ) % dip_equiv_ver (n, m)
+!              m_0 = m + m_cell
+
+!              field_1 = field_1 - G_0 ( phy % k, tar_x - src_x (m_0), tar_y - src_y (n_0) ) * mon_equiv_ver ( n_0, m_0 )
+
+!              field_1 = field_1 - DG_0 ( phy % k, tar_x - src_x (m_0), tar_y - src_y (n_0), 1.0d0, 0.0d0 ) * dip_equiv_ver (n_0, m_0)
 
 !           end if
 
@@ -1550,25 +1964,24 @@ contains
 !     end do
 
 
-!    write(*,*) abs ( field_equiv_ver (n_0, m_0) - field_1 )
-
-! !    field_1 = 0.0d0
+!     write(*,*) abs ( cellArray ( n_cell, m_cell ) % field_equiv_ver (n_point, m_point) - field_1 )
+    
 
 !     do n = 1, geo % N_col
 
 !        do m = 1, geo % N_row
 
-!           if ( n == m_cell .AND. m == n_cell ) THEN
+!           if ( m == n_cell .and. m == m_cell ) then
 
-!           ELSE
+!           else
 
-!              if (ASSOCIATED ( cellArray (m, n) % innerObstacle ) ) THEN
+!              if (associated ( cellArray (m, n) % innerObstacle ) ) then
 
 !                 call createEvalFieldAtPointsMatrix ( matrix, cellArray ( m, n ) % innerObstacle, (/tar_x/), (/tar_y/), phy % k )
           
 !                 call MatVecMultiply ( matrix, cellArray ( m, n ) % psi, field_2)
 
-!                 field_1 = field_1 - field_2
+!                 field_1 = field_1 + field_2
 
 !              end if
 
@@ -1578,7 +1991,7 @@ contains
 
 !     end do
 
-!     write(*,*) abs(field_1)
+!     write(*,*) abs( field_1 - cellArray ( n_cell, m_cell ) % field_equiv_ver (n_point, m_point) )
 
 
 !  end subroutine TestEquivalentSources 
@@ -1598,7 +2011,7 @@ contains
  !    complex(8),dimension(:),allocatable :: field_1, field_2
 
     
- !    REAL(8),dimension(:),allocatable :: tar_x, tar_y
+ !    real(8),dimension(:),allocatable :: tar_x, tar_y
 
  !    integer :: n, m, n_0, m_0, l, Left_ind, Right_ind, row, col
     
@@ -1632,11 +2045,11 @@ contains
 
  !       do m = 1, geo % N_row
 
- !          if ( n == col .AND. m == row ) THEN
+ !          if ( n == col .and. m == row ) then
 
- !          ELSE
+ !          else
 
- !             if (ASSOCIATED ( cellArray (m, n) % innerObstacle ) ) THEN
+ !             if (associated ( cellArray (m, n) % innerObstacle ) ) then
 
  !                call createEvalFieldAtPointsMatrix ( matrix, cellArray ( m, n ) % innerObstacle, tar_x, tar_y,  phy % k )
 

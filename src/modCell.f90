@@ -251,18 +251,22 @@ CONTAINS
     U_y = SPREAD ( refCell % U_y, 1, N_row )
 
 
-    P_x = SPREAD ( this % innerObstacle % C_x, 2, N_w )
+    P_x = SPREAD ( this % innerObstacle % C_x - this % center_x, 2, N_w )
 
-    P_y = SPREAD ( this % innerObstacle % C_y, 2, N_w )
+    P_y = SPREAD ( this % innerObstacle % C_y - this % center_y, 2, N_w )
 
 
-    this % cellToObsMatrix ( : , 0 * N_w + 1 : 1 * N_w ) = EXP ( I * k * ( P_x * U_x + P_y * U_y ) )
+    this % cellToObsMatrix ( : , 0 * N_w + 1 : 1 * N_w ) = &
+         EXP ( I * k * ( P_x * U_x + P_y * U_y ) )
 
-    this % cellToObsMatrix ( : , 1 * N_w + 1 : 2 * N_w ) = EXP ( I * k * (-P_x * U_x + P_y * U_y ) )
+    this % cellToObsMatrix ( : , 1 * N_w + 1 : 2 * N_w ) = &
+         EXP ( I * k * (-P_x * U_x + P_y * U_y ) )
 
-    this % cellToObsMatrix ( : , 2 * N_w + 1 : 3 * N_w ) = EXP ( I * k * (-P_x * U_x - P_y * U_y ) )
+    this % cellToObsMatrix ( : , 2 * N_w + 1 : 3 * N_w ) = &
+         EXP ( I * k * (-P_x * U_x - P_y * U_y ) )
 
-    this % cellToObsMatrix ( : , 3 * N_w + 1 : 4 * N_w ) = EXP ( I * k * ( P_x * U_x - P_y * U_y ) )
+    this % cellToObsMatrix ( : , 3 * N_w + 1 : 4 * N_w ) = &
+         EXP ( I * k * ( P_x * U_x - P_y * U_y ) )
 
 
     DEALLOCATE ( U_x, U_y )

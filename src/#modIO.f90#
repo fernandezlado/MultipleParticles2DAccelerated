@@ -142,11 +142,7 @@ CONTAINS
     READ(1,*) alg % N_dis
 
 
-    alg % N_coll_hor = 2 * alg % N_src_hor
-
-    alg % N_coll_ver = 2 * alg % N_src_ver
-
-    alg % N_wave = ( alg % N_src_hor + alg % N_src_ver )
+    alg % N_wave = ( alg % N_src_hor + alg % N_src_ver ) / 4
 
 
     ! --------------------------------------------------------------------------------

@@ -33,7 +33,7 @@
 # Values
 0.5
 1.0 1.0
-5 5
+10 3
 0
 # 16
 # 1,2
@@ -68,8 +68,8 @@
 # collocation points respectively.
 #
 # Values
-8 8
-64
+10 10
+32
 #
 # END OF FILE
 

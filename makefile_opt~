@@ -46,7 +46,8 @@ SRC = \
 	modProjectionReferenceCell.f90 \
 	modInterpolationReferenceCell.f90 \
 	modCell.f90 \
-	modForwardMap.f90
+	modForwardMap.f90 \
+	main.f90
 
 
 # --------------------------------------------------------------------------------
@@ -54,18 +55,10 @@ SRC = \
 # --------------------------------------------------------------------------------
 
 # Replace .f90 extension by .o extension
-
 OBJ_FILES = $(patsubst %.f90, %.o, $(SRC) )
 
-OBJ_FILES_1 := $(OBJ_FILES) main.o
-
-OBJ_FILES_2 := $(OBJ_FILES) main_test.o
-
 # Add path to OBJDIR
-
-OBJ_1 = $(patsubst %, $(OBJDIR)/%, $(OBJ_FILES_1))
-
-OBJ_2 = $(patsubst %, $(OBJDIR)/%, $(OBJ_FILES_2))
+OBJ = $(patsubst %, $(OBJDIR)/%, $(OBJ_FILES))
 
 # --------------------------------------------------------------------------------
 # 	Create Executable
@@ -74,20 +67,13 @@ OBJ_2 = $(patsubst %, $(OBJDIR)/%, $(OBJ_FILES_2))
 
 #OUTPUT FILENAME
 
-FILENAME_1 = MultipleParticle
+FILENAME = MultipleParticle
 
-FILENAME_2 = MultipleParticle_test
-
-EXE_1 = $(BINDIR)/$(FILENAME_1)
-
-EXE_2 = $(BINDIR)/$(FILENAME_2)
+EXE = $(BINDIR)/$(FILENAME)
 
 
-$(EXE_1): $(OBJ_1)
-	$(FC) -ggdb $(OBJ_1) $(LIBS) -o $(EXE_1)
-
-$(EXE_2): $(OBJ_2)
-	$(FC) -ggdb $(OBJ_2) $(LIBS) -o $(EXE_2)
+$(EXE): $(OBJ)
+	$(FC) $(OBJ) $(LIBS) -o $(EXE)
 
 
 $(OBJDIR)/%.o : $(SRCDIR)/%.f90
@@ -105,7 +91,7 @@ cleanall:
 	rm $(EXE)
 
 run:
-	./$(EXE_1)
+	./$(EXE)
 
 debug: 
 	$(FC) -ggdb $(patsubst %, $(SRCDIR)/%, $(SRC)) $(LIBS) -o $(EXE)_debug

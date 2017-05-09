@@ -1,15 +1,15 @@
-program MultipleParticle
+PROGRAM MultipleParticle
 
-  use modLinearAlgebra
+
+
+  USE modForwardMap
+
+  USE modParameters
   
-  use modForwardMap
-
-  use modParameters
-  
-  use modIO
+  USE modIO
 
 
-  implicit none
+  IMPLICIT NONE
 
   REAL(8) :: start, finish
 
@@ -20,9 +20,7 @@ program MultipleParticle
   TYPE (alg_Parameters) :: alg
 
 
-
   CALL loadData ( phy, geo, alg )
-
 
   write(*,*) "------------------------------"
   
@@ -59,6 +57,9 @@ program MultipleParticle
 
   write(*,*) "Time elapsed: ", finish-start
 
+!  call TestForwardMap ( phy, geo, alg )
+
+!  CALL TestEquivalentSources ( phy, geo, alg ) 
 
   call destroyForwardMap()
   

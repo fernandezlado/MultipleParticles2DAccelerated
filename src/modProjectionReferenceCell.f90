@@ -1,63 +1,63 @@
-MODULE modProjectionReferenceCell
+module modProjectionReferenceCell
 
 
 
-  USE modLinearAlgebra
+  use modLinearAlgebra
 
-  USE modSpecialFunctions
+  use modSpecialFunctions
 
 
 
-  IMPLICIT NONE
+  implicit none
 
 
  
-  TYPE ProjectionReferenceCell
+  type ProjectionReferenceCell
 
 
      !Kind of Cell (Horizontal or Vertical)
-     CHARACTER :: cellKind
+     character :: cellKind
 
      !Size of Cell
-     REAL(8) :: L_x, L_y
+     real(8) :: L_x, L_y
      
      !Number of sources, collocation points. N_dim=4 in 2D.
-     INTEGER :: N_src, N_coll, N_wave, N_dim
+     integer :: N_src, N_coll, N_wave, N_dim
 
      !Location of collocation points
-     REAL(8), DIMENSION(:), ALLOCATABLE :: coll_x, coll_y
+     real(8), dimension(:), allocatable :: coll_x, coll_y
 
-     !Location of horizontal and vertical equivalent sources    
-     REAL(8), DIMENSION(:), ALLOCATABLE :: src_x, src_y
+     !location of horizontal and vertical equivalent sources    
+     real(8), dimension(:), allocatable :: src_x, src_y
 
-     ! QR factorization of blocks for Least Square problem
-     TYPE(QR_factorization) :: QR_A, QR_B, QR_C, QR_D
-
-
-  END TYPE ProjectionReferenceCell
+     ! qr factorization of blocks for least square problem
+     type(QR_factorization) :: QR_A, QR_B, QR_C, QR_D
 
 
-
-CONTAINS
+  end type ProjectionReferenceCell
 
 
 
-  SUBROUTINE createProjectionReferenceCell (this, N_s, N_c, L_x, L_y, k, typeFlag)
+contains
+
+
+
+  subroutine createProjectionReferenceCell (this, N_s, N_c, L_x, L_y, k, typeFlag)
     ! Class constructor
 
     
-    TYPE(ProjectionReferenceCell) :: this
+    type(ProjectionReferenceCell) :: this
 
-    INTEGER :: N_s, N_c
+    integer :: N_s, N_c
 
-    REAL(8) :: L_x, L_y, k
+    real(8) :: L_x, L_y, k
 
-    CHARACTER :: typeFlag
+    character :: typeFlag
 
 
-    REAL,ALLOCATABLE,DIMENSION(:) :: disc
+    real,allocatable,dimension(:) :: disc
 
-    INTEGER :: j
+    integer :: j
 
 
     this % cellKind = typeFlag
@@ -79,12 +79,12 @@ CONTAINS
     ! Construct source and collocation points. Read notes to learn
     ! about the location of src and collocation points.
 
-    ALLOCATE ( this % coll_x ( N_c ), this % coll_y ( N_c ) )
+    allocate ( this % coll_x ( N_c ), this % coll_y ( N_c ) )
 
-    ALLOCATE ( this % src_x ( N_s ), this % src_y ( N_s ) )
+    allocate ( this % src_x ( N_s ), this % src_y ( N_s ) )
 
     
-    IF ( this % cellKind == 'H' ) THEN
+    if ( this % cellKind == 'H' ) then
        
 
        this % src_x = L_x * (/ ( ( 2.0d0 * j + 1.0d0 ) / (4.0d0 * N_s ) - 0.5d0, j = N_s, 2 * N_s - 1 ) /)
@@ -97,7 +97,7 @@ CONTAINS
        this % coll_y = 3.0d0 * L_y * (/ ( 0.5d0, j = N_c, 2 * N_c - 1 )  /)
 
 
-    ELSE IF ( this % cellKind == 'V' ) THEN
+    else if ( this % cellKind == 'V' ) then
 
 
        this % src_x = L_x * (/ ( 0.5d0, j = N_s, 2 * N_s - 1 )  /)
@@ -110,57 +110,48 @@ CONTAINS
        this % coll_y = 3.0d0 * L_y * (/ ( ( 2.0d0 * j + 1.0d0 ) / (4.0d0 * N_c ) - 0.5d0, j = 0, N_c - 1 ) /)
 
 
-    END IF
+    end if
     
 
     !Construct QR factorizations of interaction matrices
 
-    ALLOCATE ( this % QR_A % mat ( N_c, 2 * N_s  ) )
+    call createQR_factorization ( this % QR_A, N_c, 2 * N_s )
 
-    ALLOCATE ( this % QR_B % mat ( N_c, 2 * N_s  ) )
+    call createQR_factorization ( this % QR_B, N_c, 2 * N_s )
 
-    ALLOCATE ( this % QR_C % mat ( N_c, 2 * N_s  ) )
+    call createQR_factorization ( this % QR_C, N_c, 2 * N_s )
 
-    ALLOCATE ( this % QR_D % mat ( N_c, 2 * N_s  ) )
-
-
-    ALLOCATE ( this % QR_A % tau ( MIN ( N_c, 2 * N_s ) ) )
-
-    ALLOCATE ( this % QR_B % tau ( MIN ( N_c, 2 * N_s ) ) )
-
-    ALLOCATE ( this % QR_C % tau ( MIN ( N_c, 2 * N_s ) ) )
-
-    ALLOCATE ( this % QR_D % tau ( MIN ( N_c, 2 * N_s ) ) )
+    call createQR_factorization ( this % QR_D, N_c, 2 * N_s )
 
 
-    CALL createMatrices (this, k)
+    call createMatrices (this, k)
 
     
-  END SUBROUTINE createProjectionReferenceCell
+  end subroutine createProjectionReferenceCell
 
 
   
-  SUBROUTINE createMatrices (this, k)
+  subroutine createMatrices (this, k)
     ! Computes the QR factorization of the 4 blocks to
     ! solve Least Square problem to compute equivalent 
     ! sources. Read notes to learn about how to obtain
     ! these 4 blocks.
     
 
-    TYPE(ProjectionReferenceCell),TARGET :: this
+    type(ProjectionReferenceCell),target :: this
 
-    REAL(8) :: k
+    real(8) :: k
 
-    CHARACTER :: type_flag
+    character :: type_flag
 
 
-    REAL(8),DIMENSION(:,:),ALLOCATABLE :: P_x, P_y
+    real(8),dimension(:,:),allocatable :: P_x, P_y
 
-    REAL(8),DIMENSION(:,:,:),ALLOCATABLE :: Q_x, Q_y
+    real(8),dimension(:,:,:),allocatable :: Q_x, Q_y
 
-    COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: G_1, G_2, G_3, G_4
+    complex(8),dimension(:,:),allocatable :: G_1, G_2, G_3, G_4
 
-    REAL(8) :: d_x, d_y
+    real(8) :: d_x, d_y
 
 
     ALLOCATE ( P_x ( this % N_coll, this % N_src ) )
@@ -390,34 +381,36 @@ CONTAINS
     x_4 = 0.5d0 * ( b_hat_a ( 1 : 2 * N_s ) - b_hat_b ( 1 : 2 * N_s ) - b_hat_c ( 1 : 2 * N_s ) + b_hat_d ( 1 : 2 * N_s ) )
 
 
-    NULLIFY ( rhs_1, rhs_2, rhs_3, rhs_4 )
+    nullify ( rhs_1, rhs_2, rhs_3, rhs_4 )
 
-    NULLIFY ( x_1, x_2, x_3, x_4 )
+    nullify ( x_1, x_2, x_3, x_4 )
 
-    NULLIFY ( N_s, N_c )
-
-    DEALLOCATE ( b_hat_a, b_hat_b, b_hat_c, b_hat_d ) 
+    nullify ( N_s, N_c )
 
 
-  END SUBROUTINE computeEquivalentSourceAmplitude
+  end subroutine computeEquivalentSourceAmplitude
 
 
 
-  SUBROUTINE destroyProjectionReferenceCell (this)
+  subroutine destroyProjectionReferenceCell (this)
 
     
-    TYPE(ProjectionReferenceCell)::this
+    type(ProjectionReferenceCell)::this
 
 
-    DEALLOCATE ( this % coll_x, this % coll_y, this % src_x, this % src_y)
+    deallocate ( this % coll_x, this % coll_y, this % src_x, this % src_y)
 
-    DEALLOCATE ( this % QR_A % mat, this % QR_B % mat, this % QR_C % mat, this % QR_D % mat )
+    call destroyQR_factorization ( this % QR_A )
 
-    DEALLOCATE ( this % QR_A % tau, this % QR_B % tau, this % QR_C % tau, this % QR_D % tau )
+    call destroyQR_factorization ( this % QR_B ) 
+
+    call destroyQR_factorization ( this % QR_C )
+
+    call destroyQR_factorization ( this % QR_D )
 
 
-  END SUBROUTINE destroyProjectionReferenceCell
+  end subroutine destroyProjectionReferenceCell
 
 
 
-END MODULE modProjectionReferenceCell
+end module modProjectionReferenceCell
