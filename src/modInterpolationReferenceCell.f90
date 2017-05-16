@@ -1,61 +1,87 @@
-MODULE modInterpolationReferenceCell
+module modInterpolationReferenceCell
+!-------------------------------------------------------------------------------
+! CALTECH, CMS, Oscar Bruno's Group
+!-------------------------------------------------------------------------------
+! modInterpolationReferenceCell.f90 - Module that defines the 
+! InterpolationReferenceCellell type and its methods.
+!
+! DESCRIPTION: 
+!> defines Type projectionReferenceCell. Implements the class constructor, 
+!> a routine to compute the QR factorization of the LeastSquare problem and
+!> a routine to obtain the equivalent sources amplitudes.
+!
+!> @author
+!> Agustin G. Fernandez-Lado
+!
+! MODIFIED: 15 May 2017
+!-------------------------------------------------------------------------------
+
+
+  use modMathConstants
+
+  use modLinearAlgebra
 
 
 
-  USE modMathConstants
-
-  USE modLinearAlgebra
-
-
-
-  IMPLICIT NONE
+  implicit none
 
 
  
-  TYPE InterpolationReferenceCell
+  type InterpolationReferenceCell
 
 
      !Size of Cell
-     REAL(8) :: L_x, L_y
+     real(8) :: L_x, L_y
      
      !Number of sources in first quadrant
-     INTEGER :: N_src
+     integer :: N_src
 
      !Number of plane waves in first quadrant to interpolate inside cell
-     INTEGER :: N_wave
+     integer :: N_wave
 
      !Direction of plane waves
-     REAL(8), DIMENSION(:), ALLOCATABLE :: u_x, u_y
+     real(8), dimension(:), allocatable :: u_x, u_y
 
      !Location of horizontal and vertical equivalent sources    
-     REAL(8), DIMENSION(:), ALLOCATABLE :: src_x, src_y
+     real(8), dimension(:), allocatable :: src_x, src_y
 
      ! QR factorization of blocks for Least Square problem
-     TYPE(QR_factorization) :: QR_A, QR_B, QR_C, QR_D
+     type(QR_factorization) :: QR_A, QR_B, QR_C, QR_D
+
+     ! Auxiliary vectors to solve Least Square problems
+     complex(8),dimension(:),allocatable :: b_hat_a, b_hat_b, b_hat_c, b_hat_d
 
 
-  END TYPE InterpolationReferenceCell
-
-
-
-
-CONTAINS
+  end type InterpolationReferenceCell
 
 
 
-  SUBROUTINE createInterpolationReferenceCell (this, N_s_h, N_s_v, N_w, L_x, L_y, k)
-    ! Class constructor
+contains
+
+
+
+  subroutine createInterpolationReferenceCell (this, N_s_h, N_s_v, N_w, L_x, L_y, k)
     
-    TYPE(InterpolationReferenceCell) :: this
+    ! --------------------------------------------------------------------------------
+    !
+    ! Class constructor. N_s_h, N_s_v are the number equivalent sources in the
+    ! first quadrant paralell to the x and y axis (h=horizontal, v=vertical)
+    ! N_w is the number of plane waves (with directions in the first quarant) to
+    ! perform the plane wave expansion. L_x, L_y are the lengths of the sides of
+    ! the cell. k is the wavenumber
+    !
+    ! --------------------------------------------------------------------------------
 
-    INTEGER :: N_s_h, N_s_v, N_w
+    type(InterpolationReferenceCell) :: this
 
-    REAL(8) :: L_x, L_y, k
+    integer :: N_s_h, N_s_v, N_w
+
+    real(8) :: L_x, L_y, k
 
 
-    REAL,ALLOCATABLE,DIMENSION(:) :: disc
+    real(8),allocatable,dimension(:) :: disc
 
-    INTEGER :: j
+    integer :: j
 
 
     this % L_x = L_x
@@ -67,126 +93,183 @@ CONTAINS
 
     this % N_wave = N_w
 
-    
+    ! --------------------------------------------------------------------------------
+    !
     ! Construct source points
+    !
+    ! --------------------------------------------------------------------------------
 
-    ALLOCATE ( this % src_x ( 1 : this % N_src ), this % src_y ( 1 : this % N_src ) )
+    allocate ( this % src_x ( 1 : this % N_src ), this % src_y ( 1 : this % N_src ) )
 
-    
-    this % src_x ( 1 : N_s_h ) = L_x * (/ ( ( 2.0d0 * j + 1.0d0 ) / ( 4.0d0 * N_s_h ) - 0.5d0, j = N_s_h, 2 * N_s_h - 1 ) /)
 
-    this % src_y ( 1 : N_s_h ) = L_y * (/ ( 0.5d0, j = 1, N_s_h ) /)
+    this % src_y ( 1 : N_s_h ) = L_y * (/ ( 0.5d0, j = 1, N_s_h ) /)    
+
+    this % src_x ( 1 : N_s_h ) = L_x * &
+         (/ &
+         ( ( 2.0d0 * j + 1.0d0 ) / ( 4.0d0 * N_s_h ) - 0.5d0, &
+         j = N_s_h, 2 * N_s_h - 1 ) &
+         /)
 
 
     this % src_x ( N_s_h + 1 : N_s_h + N_s_v ) = L_x * (/ ( 0.5d0, j = 1, N_s_v ) /)
     
-    this % src_y ( N_s_h + 1 : N_s_h + N_s_v ) = L_y * (/ ( ( 2.0d0 * j + 1.0d0 ) / ( 4.0d0 * N_s_v ) - 0.5d0, j = 2 * N_s_v - 1, N_s_v, -1 ) /)
+    this % src_y ( N_s_h + 1 : N_s_h + N_s_v ) = L_y * &
+         (/ &
+         ( ( 2.0d0 * j + 1.0d0 ) / ( 4.0d0 * N_s_v ) - 0.5d0, &
+         j= 2 * N_s_v - 1, N_s_v, -1 ) &
+         /)
 
-
+    ! --------------------------------------------------------------------------------
+    !
     ! Construct direction of plane waves
+    !
+    ! --------------------------------------------------------------------------------
 
-    ALLOCATE ( this % u_x ( 1 : N_w ), this % u_y ( 1 : N_w ) )
+    allocate ( this % u_x ( 1 : N_w ), this % u_y ( 1 : N_w ) )
 
     
-    this % u_x = (/ ( cos ( pi / 2.0d0 * ( 2.0d0 * j + 1.0d0) / ( 2.0d0 * N_w ) ), j =0, N_w - 1 ) /)
+    this % u_x = &
+         (/ & 
+         ( cos ( pi / 2.0d0 * ( 2.0d0 * j + 1.0d0) / ( 2.0d0 * N_w ) ), &
+         j =0, N_w - 1 ) &
+         /)
 
-    this % u_y = (/ ( sin ( pi / 2.0d0 * ( 2.0d0 * j + 1.0d0) / ( 2.0d0 * N_w ) ), j = 0, N_w - 1 ) /)
+    this % u_y = &
+         (/ &
+         ( sin ( pi / 2.0d0 * ( 2.0d0 * j + 1.0d0) / ( 2.0d0 * N_w ) ), &
+         j = 0, N_w - 1 ) &
+         /)
 
 
+    ! --------------------------------------------------------------------------------
+    !
     ! Construct QR factorizations of interaction matrices
-
-    ALLOCATE ( this % QR_A % mat ( 1 : N_s_h + N_s_v , 1 : N_w ) )
-
-    ALLOCATE ( this % QR_B % mat ( 1 : N_s_h + N_s_v , 1 : N_w ) )
-
-    ALLOCATE ( this % QR_C % mat ( 1 : N_s_h + N_s_v , 1 : N_w ) )
-
-    ALLOCATE ( this % QR_D % mat ( 1 : N_s_h + N_s_v , 1 : N_w ) )
+    !
+    ! --------------------------------------------------------------------------------
 
 
-    ALLOCATE ( this % QR_A % tau ( 1 : MIN ( N_s_h + N_s_v , N_w ) ) )
+    call createQR_factorization ( this % QR_A , N_s_h + N_s_v, N_w )
 
-    ALLOCATE ( this % QR_B % tau ( 1 : MIN ( N_s_h + N_s_v , N_w ) ) )
+    call createQR_factorization ( this % QR_B, N_s_h + N_s_v, N_w )
 
-    ALLOCATE ( this % QR_C % tau ( 1 : MIN ( N_s_h + N_s_v , N_w ) ) )
+    call createQR_factorization ( this % QR_C , N_s_h + N_s_v, N_w )
 
-    ALLOCATE ( this % QR_D % tau ( 1 : MIN ( N_s_h + N_s_v , N_w ) ) )
+    call createQR_factorization ( this % QR_D , N_s_h + N_s_v, N_w )
 
 
-    CALL createMatrices (this, k)
+    call createMatrices (this, k)
+
+
+    ! --------------------------------------------------------------------------------
+    ! 
+    ! Allocate vectors to store RHS of the least square problems
+    !
+    ! --------------------------------------------------------------------------------
+
+
+    allocate ( this % b_hat_a ( 1 : this % N_src ) )
+
+    allocate ( this % b_hat_b ( 1 : this % N_src ) )
+
+    allocate ( this % b_hat_c ( 1 : this % N_src ) )
+
+    allocate ( this % b_hat_d ( 1 : this % N_src ) )
 
     
-  END SUBROUTINE createInterpolationReferenceCell
+  end subroutine createInterpolationReferenceCell
 
 
   
-  SUBROUTINE createMatrices (this, k)
+  subroutine createMatrices (this, k)
+
+    ! --------------------------------------------------------------------------------
+    !
     ! Computes the QR factorization of each block to solve
     ! the least square problem to interpolate the field at 
     ! the boundary inside the cell.
-
+    !
     ! Read notes for a better comprehension of how the
     ! blocks are constructed.
-    
-    TYPE(InterpolationReferenceCell),TARGET :: this
+    !
+    ! --------------------------------------------------------------------------------
 
-    REAL(8) :: k
+    type(InterpolationReferenceCell),target :: this
 
-    CHARACTER :: type_flag
+    real(8) :: k
 
-
-    INTEGER :: j
-
-    REAL(8),DIMENSION(:,:),ALLOCATABLE :: P_x, P_y
-
-    REAL(8),DIMENSION(:,:,:),ALLOCATABLE :: Q_x, Q_y
-
-    COMPLEX(8),DIMENSION(:,:,:),ALLOCATABLE :: E
+    character :: type_flag
 
 
-    ALLOCATE ( P_x ( 1 : this % N_src, 1 : this % N_wave) )
-
-    ALLOCATE ( P_y ( 1 : this % N_src, 1 : this % N_wave) )
-
-
-    ALLOCATE ( Q_x ( 1 : this % N_src, 1 : this % N_wave, 1:4 ) )
-
-    ALLOCATE ( Q_y ( 1 : this % N_src, 1 : this % N_wave, 1:4 ) )
+    integer :: j
 
     
-    ALLOCATE ( E ( 1 : this % N_src, 1 : this % N_wave, 1:4 ) )
+    real(8),dimension(:,:),allocatable :: Q_x, Q_y
+
+    real(8),dimension(:,:,:),allocatable :: U_x, U_y
+
+    complex(8),dimension(:,:,:),allocatable :: E
 
 
-    !CREATE QR DECOMPOSITION FOR HORIZONTAL INTERACTION MATRICES
+    allocate ( Q_x ( 1 : this % N_src, 1 : this % N_wave) )
 
-    Q_x (:,:,1) = SPREAD ( this % u_x, 1, this % N_src )
-
-    Q_y (:,:,1) = SPREAD ( this % u_y, 1, this % N_src )
+    allocate ( Q_y ( 1 : this % N_src, 1 : this % N_wave) )
 
 
-    Q_x (:,:,2) = -Q_x (:,:,1) 
+    allocate ( U_x ( 1 : this % N_src, 1 : this % N_wave, 1:4 ) )
 
-    Q_y (:,:,2) =  Q_y (:,:,1) 
+    allocate ( U_y ( 1 : this % N_src, 1 : this % N_wave, 1:4 ) )
+
+    
+    allocate ( E ( 1 : this % N_src, 1 : this % N_wave, 1:4 ) )
+
+    ! --------------------------------------------------------------------------------
+    !
+    ! Spread direction of plane waves and location of equivalent sources
+    !
+    ! --------------------------------------------------------------------------------
+
+    U_x (:,:,1) = spread ( this % u_x, 1, this % N_src )
+
+    U_y (:,:,1) = spread ( this % u_y, 1, this % N_src )
 
 
-    Q_x (:,:,3) = -Q_x (:,:,1) 
+    U_x (:,:,2) = -U_x (:,:,1) 
 
-    Q_y (:,:,3) = -Q_y (:,:,1) 
-
-
-    Q_x (:,:,4) =  Q_x (:,:,1) 
-
-    Q_y (:,:,4) = -Q_y (:,:,1) 
+    U_y (:,:,2) =  U_y (:,:,1) 
 
 
-    P_x = SPREAD ( this % src_x, 2, this % N_wave ) 
+    U_x (:,:,3) = -U_x (:,:,1) 
+
+    U_y (:,:,3) = -U_y (:,:,1) 
+
+
+    U_x (:,:,4) =  U_x (:,:,1) 
+
+    U_y (:,:,4) = -U_y (:,:,1) 
+
+
+    Q_x = spread ( this % src_x, 2, this % N_wave ) 
        
-    P_y = SPREAD ( this % src_y, 2, this % N_wave )
+    Q_y = spread ( this % src_y, 2, this % N_wave )
+
        
+    ! --------------------------------------------------------------------------------
+    ! 
+    ! Compute Plane Waves Evaluated at Equiv. sources
+    !
+    ! --------------------------------------------------------------------------------
 
-    !Compute Plane Waves Evaluated at Equiv. sources
+    forall ( j = 1:4 ) 
 
-    FORALL ( j = 1:4 ) E(:,:,j) = EXP ( I * k * ( P_x * Q_x (:,:,j) + P_y * Q_y (:,:,j) ) )
+       E(:,:,j) = exp ( I * k * ( Q_x * U_x (:,:,j) + Q_y * U_y (:,:,j) ) )
+
+    end forall
+
+    ! --------------------------------------------------------------------------------
+    !
+    ! Construct matrices of eigenvalues
+    !
+    ! --------------------------------------------------------------------------------
 
 
     this % QR_A % mat = E(:,:,1) + E(:,:,2) + E(:,:,3) + E(:,:,4) 
@@ -197,47 +280,54 @@ CONTAINS
 
     this % QR_D % mat = E(:,:,1) - E(:,:,2) - E(:,:,3) + E(:,:,4)
 
+    ! --------------------------------------------------------------------------------
+    !
+    ! Compute QR factorization
+    !
+    ! --------------------------------------------------------------------------------
     
-    CALL computeQR_Factorization ( this % QR_A % mat, this % QR_A)
+    call computeQR_Factorization ( this % QR_A % mat, this % QR_A)
     
-    CALL computeQR_Factorization ( this % QR_B % mat, this % QR_B)
+    call computeQR_Factorization ( this % QR_B % mat, this % QR_B)
 
-    CALL computeQR_Factorization ( this % QR_C % mat, this % QR_C)
+    call computeQR_Factorization ( this % QR_C % mat, this % QR_C)
     
-    CALL computeQR_Factorization ( this % QR_D % mat, this % QR_D)
+    call computeQR_Factorization ( this % QR_D % mat, this % QR_D)
 
 
-    DEALLOCATE ( E )
+    deallocate ( E )
     
-    DEALLOCATE ( P_x, P_y, Q_x, Q_y )
+    deallocate ( Q_x, Q_y, U_x, U_y )
 
         
-  END SUBROUTINE createMatrices
+  end subroutine createMatrices
 
 
 
-  SUBROUTINE computePlaneWaveWeights (this, rhs, xi)
-    !Solves a least square problem to obtain the amplitudes
-    !of the plane waves to interpolate inside the cell.
+  subroutine computePlaneWaveWeights (this, rhs, xi)
 
-    !rhs contains the field in the boundary of the cell
-    !xi stores the amplitudes.
+    ! --------------------------------------------------------------------------------
+    !
+    ! Solves a least square problem to obtain the amplitudes
+    ! of the plane waves to interpolate inside the cell.
+    !
+    ! rhs contains the field in the boundary of the cell
+    ! xi stores the amplitudes.
+    !
+    ! --------------------------------------------------------------------------------
 
+    type(InterpolationReferenceCell),target :: this
 
-    TYPE(InterpolationReferenceCell),TARGET :: this
-
-    COMPLEX(8),TARGET,DIMENSION(:) :: rhs
+    complex(8),target,dimension(:) :: rhs
     
-    COMPLEX(8),TARGET,DIMENSION(:) :: xi
+    complex(8),target,dimension(:) :: xi
 
 
-    INTEGER,POINTER :: N_s, N_w
+    integer,pointer :: N_s, N_w
 
-    COMPLEX(8),POINTER :: rhs_1(:), rhs_2(:), rhs_3(:), rhs_4(:)
+    complex(8),pointer :: rhs_1(:), rhs_2(:), rhs_3(:), rhs_4(:)
 
-    COMPLEX(8),POINTER :: xi_1(:), xi_2(:), xi_3(:), xi_4(:)
-
-    COMPLEX(8),ALLOCATABLE,DIMENSION(:) :: b_hat_a, b_hat_b, b_hat_c, b_hat_d
+    complex(8),pointer :: xi_1(:), xi_2(:), xi_3(:), xi_4(:)
 
 
     N_s => this % N_src
@@ -245,14 +335,11 @@ CONTAINS
     N_w => this % N_wave
 
 
-    ALLOCATE ( b_hat_a ( 1 : N_s ) )
-
-    ALLOCATE ( b_hat_b ( 1 : N_s ) )
-
-    ALLOCATE ( b_hat_c ( 1 : N_s ) )
-
-    ALLOCATE ( b_hat_d ( 1 : N_s ) )
-
+    ! --------------------------------------------------------------------------------
+    !
+    ! Split RHS
+    !
+    ! --------------------------------------------------------------------------------
 
     rhs_1 ( 1 : N_s ) => rhs ( 0 * N_s + 1 : 1 * N_s )
 
@@ -263,6 +350,12 @@ CONTAINS
     rhs_4 ( 1 : N_s ) => rhs ( 3 * N_s + 1 : 4 * N_s)
 
 
+    ! --------------------------------------------------------------------------------
+    !
+    ! Split unknown
+    !
+    ! --------------------------------------------------------------------------------
+
     xi_1 ( 1 : N_w ) => xi ( 0 * N_w + 1 : 1 * N_w )
 
     xi_2 ( 1 : N_w ) => xi ( 1 * N_w + 1 : 2 * N_w )
@@ -272,63 +365,109 @@ CONTAINS
     xi_4 ( 1 : N_w ) => xi ( 3 * N_w + 1 : 4 * N_w ) 
 
 
-    b_hat_a = 0.5d0 * (rhs_1 + rhs_2 + rhs_3 + rhs_4)
+    ! --------------------------------------------------------------------------------
+    !
+    ! Apply orthonormal transformation to RHS
+    !
+    ! --------------------------------------------------------------------------------
 
-    b_hat_b = 0.5d0 * (rhs_1 - rhs_2 + rhs_3 - rhs_4)
+    this % b_hat_a = 0.5d0 * (rhs_1 + rhs_2 + rhs_3 + rhs_4)
 
-    b_hat_c = 0.5d0 * (rhs_1 + rhs_2 - rhs_3 - rhs_4)
+    this % b_hat_b = 0.5d0 * (rhs_1 - rhs_2 + rhs_3 - rhs_4)
 
-    b_hat_d = 0.5d0 * (rhs_1 - rhs_2 - rhs_3 + rhs_4)
+    this % b_hat_c = 0.5d0 * (rhs_1 + rhs_2 - rhs_3 - rhs_4)
 
-
-
-    CALL LeastSquareSolve ( this % QR_A, b_hat_a)
-
-    CALL LeastSquareSolve ( this % QR_B, b_hat_b)
-
-    CALL LeastSquareSolve ( this % QR_C, b_hat_c)
-
-    CALL LeastSquareSolve ( this % QR_D, b_hat_d)
+    this % b_hat_d = 0.5d0 * (rhs_1 - rhs_2 - rhs_3 + rhs_4)
 
 
-    xi_1 = 0.5d0 * ( b_hat_a ( 1 : N_w ) + b_hat_b ( 1 : N_w ) + b_hat_c ( 1 : N_w ) + b_hat_d ( 1 : N_w ) )
+    ! --------------------------------------------------------------------------------
+    !
+    ! Solve Least Square Problems
+    !
+    ! --------------------------------------------------------------------------------
 
-    xi_2 = 0.5d0 * ( b_hat_a ( 1 : N_w ) - b_hat_b ( 1 : N_w ) + b_hat_c ( 1 : N_w ) - b_hat_d ( 1 : N_w ) )
+    call LeastSquareSolve ( this % QR_A, this % b_hat_a)
 
-    xi_3 = 0.5d0 * ( b_hat_a ( 1 : N_w ) + b_hat_b ( 1 : N_w ) - b_hat_c ( 1 : N_w ) - b_hat_d ( 1 : N_w ) )
+    call LeastSquareSolve ( this % QR_B, this % b_hat_b)
 
-    xi_4 = 0.5d0 * ( b_hat_a ( 1 : N_w ) - b_hat_b ( 1 : N_w ) - b_hat_c ( 1 : N_w ) + b_hat_d ( 1 : N_w ) )
+    call LeastSquareSolve ( this % QR_C, this % b_hat_c) 
 
-
-
-    NULLIFY ( rhs_1, rhs_2, rhs_3, rhs_4 )
-
-    NULLIFY ( xi_1, xi_2, xi_3, xi_4 )
-
-    NULLIFY ( N_s, N_w )
-
-    DEALLOCATE ( b_hat_a, b_hat_b, b_hat_c, b_hat_d ) 
+    call LeastSquareSolve ( this % QR_D, this % b_hat_d)
 
 
-  END SUBROUTINE computePlaneWaveWeights
+    ! --------------------------------------------------------------------------------
+    !
+    ! Apply orthonormal transformation to solutions
+    !
+    ! --------------------------------------------------------------------------------
+
+    xi_1 = 0.5d0 * &
+         ( &
+         this % b_hat_a ( 1 : N_w ) + &
+         this % b_hat_b ( 1 : N_w ) + &
+         this % b_hat_c ( 1 : N_w ) + &
+         this % b_hat_d ( 1 : N_w )   &
+         )
+
+    xi_2 = 0.5d0 * &
+         ( &
+         this % b_hat_a ( 1 : N_w ) - &
+         this % b_hat_b ( 1 : N_w ) + &
+         this % b_hat_c ( 1 : N_w ) - &
+         this % b_hat_d ( 1 : N_w )   &
+         )
+
+    xi_3 = 0.5d0 * &
+         ( &
+         this % b_hat_a ( 1 : N_w ) + &
+         this % b_hat_b ( 1 : N_w ) - &
+         this % b_hat_c ( 1 : N_w ) - &
+         this % b_hat_d ( 1 : N_w )   &
+         )
+
+    xi_4 = 0.5d0 * &
+         ( &
+         this % b_hat_a ( 1 : N_w ) - &
+         this % b_hat_b ( 1 : N_w ) - &
+         this % b_hat_c ( 1 : N_w ) + &
+         this % b_hat_d ( 1 : N_w )   &
+         )
 
 
 
-  SUBROUTINE destroyInterpolationReferenceCell (this)
+    nullify ( rhs_1, rhs_2, rhs_3, rhs_4 )
+
+    nullify ( xi_1, xi_2, xi_3, xi_4 )
+
+    nullify ( N_s, N_w )
+
+
+  end subroutine computePlaneWaveWeights
+
+
+
+  subroutine destroyInterpolationReferenceCell (this)
 
     
-    TYPE(InterpolationReferenceCell) :: this
+    type(InterpolationReferenceCell) :: this
 
 
-    DEALLOCATE ( this % u_x, this % u_y, this % src_x, this % src_y)
-
-    DEALLOCATE ( this % QR_A % mat, this % QR_B % mat, this % QR_C % mat, this % QR_D % mat )
-
-    DEALLOCATE ( this % QR_A % tau, this % QR_B % tau, this % QR_C % tau, this % QR_D % tau )
+    deallocate ( this % b_hat_a, this % b_hat_b, this % b_hat_c, this % b_hat_d )
+    
+    deallocate ( this % u_x, this % u_y, this % src_x, this % src_y)
 
 
-  END SUBROUTINE destroyInterpolationReferenceCell
+    call destroyQR_factorization ( this % QR_A )
+
+    call destroyQR_factorization ( this % QR_B ) 
+
+    call destroyQR_factorization ( this % QR_C )
+
+    call destroyQR_factorization ( this % QR_D )
+
+
+  end subroutine destroyInterpolationReferenceCell
 
 
 
-END MODULE modInterpolationReferenceCell
+end module modInterpolationReferenceCell

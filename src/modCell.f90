@@ -1,69 +1,94 @@
-MODULE modCell
+module modCell
+!-------------------------------------------------------------------------------
+! CALTECH, CMS, Oscar Bruno's Group
+!-------------------------------------------------------------------------------
+! modCell.f90 - Module that defines a Cell type and its methods. This object
+! mediates between the accelerator's Reference Cells and the "low-level" 
+! operations of evaluating the fields of a given obstacle.
+!
+! DESCRIPTION: 
+!> defines Type cell and implements the ObstacleToCell and CellToObstacle
+!> opertions using matrices.
+!
+!> @author
+!> Agustin G. Fernandez-Lado
+!
+! MODIFIED: 15 May 2017
+!-------------------------------------------------------------------------------
 
 
 
-  USE modLinearAlgebra
+  use modLinearAlgebra
 
-  USE modMathConstants
+  use modMathConstants          
 
-  USE modObstacle
+  use modObstacle
 
-  USE modProjectionReferenceCell
+  use modProjectionReferenceCell
 
-  USE modInterpolationReferenceCell
+  use modInterpolationReferenceCell
 
-  USE modFarInteractions
+  use modFarInteractions
 
 
 
-  IMPLICIT NONE
+  implicit none
 
 
   
-  TYPE Cell
+  type Cell
 
 
-     REAL(8) :: center_x, center_y
+     real(8) :: center_x, center_y
 
-     TYPE(Obstacle),POINTER :: innerObstacle
+     type(Obstacle),pointer :: innerObstacle 
 
-     COMPLEX(8),DIMENSION(:),POINTER :: psi
+     complex(8),dimension(:),pointer :: psi
 
-     COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: obsToCellMatrix_hor, obsToCellMatrix_ver
+     complex(8),dimension(:,:),allocatable :: obsToCellMatrix_hor, obsToCellMatrix_ver
      
-     COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: cellToObsMatrix
+     complex(8),dimension(:,:),allocatable :: cellToObsMatrix
      
-     COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: mon_equiv_hor, dip_equiv_hor
+     complex(8),dimension(:,:),allocatable :: mon_equiv_hor, dip_equiv_hor
 
-     COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: mon_equiv_ver, dip_equiv_ver
+     complex(8),dimension(:,:),allocatable :: mon_equiv_ver, dip_equiv_ver
 
-     COMPLEX(8),DIMENSION(:,:),ALLOCATABLE :: field_equiv_hor, field_equiv_ver
-
-
-  END TYPE Cell
+     complex(8),dimension(:,:),allocatable :: field_equiv_hor, field_equiv_ver
 
 
+  end type Cell
 
-CONTAINS
 
 
-    
-  SUBROUTINE createCell (this, c_x, c_y, obs, density, refCell_hor, refCell_ver, interpRefCell, k )
+contains
+
 
     
-    TYPE(Cell) :: this
-
-    TYPE(InterpolationReferenceCell) :: interpRefCell
-
-    REAL(8) :: c_x, c_y
+  subroutine createCell (this, c_x, c_y, obs, density, proj_refCell_hor, proj_refCell_ver, interpRefCell, k )
     
-    TYPE (Obstacle),POINTER :: obs
+    ! --------------------------------------------------------------------------------
+    ! 
+    ! Class constructor. Receives as parameters the object (this) the cell's center 
+    ! location (c_x, c_y), a pointer to the obstacle associated with the cell,
+    ! the density in this obstacle to point to, the reference cells to
+    ! construct the maps to evaluate the fields and the wavenumber k.
+    !
+    ! --------------------------------------------------------------------------------
 
-    COMPLEX(8),DIMENSION(:),TARGET :: density
+    
+    type(Cell) :: this
 
-    TYPE(ProjectionReferenceCell) :: refCell_hor, refCell_ver
+    type(InterpolationReferenceCell) :: interpRefCell
 
-    REAL(8) :: k
+    real(8) :: c_x, c_y
+    
+    type (Obstacle),pointer :: obs
+
+    complex(8),dimension(:),TARGET :: density
+
+    type(ProjectionReferenceCell) :: proj_refCell_hor, proj_refCell_ver
+
+    real(8) :: k
 
 
     this % center_x = c_x
@@ -73,17 +98,17 @@ CONTAINS
     this % psi => density
 
 
-    ALLOCATE ( this % mon_equiv_hor ( 2 * refCell_hor % N_src, 2 ) )
+    allocate ( this % mon_equiv_hor ( 2 * proj_refCell_hor % N_src, 2 ) )
 
-    ALLOCATE ( this % dip_equiv_hor ( 2 * refCell_hor % N_src, 2 ) )
+    allocate ( this % dip_equiv_hor ( 2 * proj_refCell_hor % N_src, 2 ) )
 
-    ALLOCATE ( this % mon_equiv_ver ( 2 * refCell_ver % N_src, 2 ) )
+    allocate ( this % mon_equiv_ver ( 2 * proj_refCell_ver % N_src, 2 ) )
 
-    ALLOCATE ( this % dip_equiv_ver ( 2 * refCell_ver % N_src, 2 ) )
+    allocate ( this % dip_equiv_ver ( 2 * proj_refCell_ver % N_src, 2 ) )
 
-    ALLOCATE ( this % field_equiv_hor ( 2 * refCell_hor % N_src, 2 ) )
+    allocate ( this % field_equiv_hor ( 2 * proj_refCell_hor % N_src, 2 ) )
 
-    ALLOCATE ( this % field_equiv_ver ( 2 * refCell_ver % N_src, 2 ) )
+    allocate ( this % field_equiv_ver ( 2 * proj_refCell_ver % N_src, 2 ) )
 
 
     this % mon_equiv_hor = 0.0d0
@@ -102,136 +127,182 @@ CONTAINS
     this % innerObstacle => obs
 
 
-    IF (ASSOCIATED ( this % innerObstacle ) .eqv. .TRUE. ) THEN
+    if ( associated ( this % innerObstacle ) .eqv. .TRUE. ) then
 
 
-       ALLOCATE ( this % obsToCellMatrix_hor ( 4 * refCell_hor % N_coll,  obs % num_dis ) )
+       allocate ( this % obsToCellMatrix_hor ( 4 * proj_refCell_hor % N_coll, &
+            obs % num_dis ) )
 
-       ALLOCATE ( this % obsToCellMatrix_ver ( 4 * refCell_ver % N_coll,  obs % num_dis ) )
-
-       ALLOCATE ( this % cellToObsMatrix ( obs % num_dis, 4 * interpRefCell % N_wave ) )
-
-
-       CALL createObstacleToCellMatrix ( this, refCell_hor, k )
-
-       CALL createObstacleToCellMatrix ( this, refCell_ver, k )
-
-       CALL createCellToObstacleMatrix ( this, interpRefCell, k )
+       allocate ( this % obsToCellMatrix_ver ( 4 * proj_refCell_ver % N_coll, &
+            obs % num_dis ) )
 
 
-    END IF
+       allocate ( this % cellToObsMatrix ( obs % num_dis, &
+            4 * interpRefCell % N_wave ) )
 
 
-  END SUBROUTINE createCell
+       call createObstacleToCellMatrix ( this, proj_refCell_hor, k )
+
+       call createObstacleToCellMatrix ( this, proj_refCell_ver, k )
+
+       call createCellToObstacleMatrix ( this, interpRefCell, k )
+
+
+    end if
+
+
+  end subroutine createCell
 
 
 
-  SUBROUTINE createObstacleToCellMatrix (this, refCell, k)
+  subroutine createObstacleToCellMatrix (this, proj_refCell, k)
+
+    ! --------------------------------------------------------------------------------
+    !
+    ! Computes the matrices to compute the field generated by a perfect conductor
+    ! through matrix-vector multiplication.
+    !
+    ! --------------------------------------------------------------------------------
 
 
-    TYPE(Cell) :: this
+    type(Cell) :: this
       
-    TYPE(ProjectionReferenceCell) :: refCell
+    type(ProjectionReferenceCell) :: proj_refCell
       
-    REAL(8) :: k
+    real(8) :: k
 
 
-    REAL(8),ALLOCATABLE,DIMENSION(:) :: tar_x, tar_y
+    real(8),allocatable,dimension(:) :: tar_x, tar_y
 
 
-    ALLOCATE ( tar_x ( 1 : 4 * refCell % N_coll ) )
+    allocate ( tar_x ( 1 : 4 * proj_refCell % N_coll ) )
 
-    ALLOCATE ( tar_y ( 1 : 4 * refCell % N_coll ) )
+    allocate ( tar_y ( 1 : 4 * proj_refCell % N_coll ) )
 
 
-    IF ( refCell % cellKind == 'H' ) THEN
+    ! --------------------------------------------------------------------------------
+    ! Choose target points to construct and construct matrix
+    ! --------------------------------------------------------------------------------
+    
+    if ( proj_refCell % cellKind == 'H' ) then
 
        
-       tar_x ( 0 * refCell % N_coll + 1 : 1 * refCell % N_coll ) = refCell % coll_x
+       tar_x ( 0 * proj_refCell % N_coll + 1 : 1 * proj_refCell % N_coll ) = &
+            proj_refCell % coll_x
 
-       tar_y ( 0 * refCell % N_coll + 1 : 1 * refCell % N_coll ) = refCell % coll_y
-
-
-       tar_x ( 1 * refCell % N_coll + 1 : 2 * refCell % N_coll ) =-refCell % coll_x
-
-       tar_y ( 1 * refCell % N_coll + 1 : 2 * refCell % N_coll ) = refCell % coll_y
+       tar_y ( 0 * proj_refCell % N_coll + 1 : 1 * proj_refCell % N_coll ) = &
+            proj_refCell % coll_y
 
 
-       tar_x ( 2 * refCell % N_coll + 1 : 3 * refCell % N_coll ) =-refCell % coll_x
+       tar_x ( 1 * proj_refCell % N_coll + 1 : 2 * proj_refCell % N_coll ) = &
+            -proj_refCell % coll_x
 
-       tar_y ( 2 * refCell % N_coll + 1 : 3 * refCell % N_coll ) =-refCell % coll_y
-
-
-       tar_x ( 3 * refCell % N_coll + 1 : 4 * refCell % N_coll ) = refCell % coll_x
-
-       tar_y ( 3 * refCell % N_coll + 1 : 4 * refCell % N_coll ) =-refCell % coll_y
+       tar_y ( 1 * proj_refCell % N_coll + 1 : 2 * proj_refCell % N_coll ) = &
+            proj_refCell % coll_y
 
 
-       !translate reference Cell to the Cell centered at (m L_x, n L_y)
+       tar_x ( 2 * proj_refCell % N_coll + 1 : 3 * proj_refCell % N_coll ) = &
+            -proj_refCell % coll_x
 
-       tar_x = this % center_x + tar_x
-
-       tar_y = this % center_y + tar_y
-
-
-       CALL createEvalFieldAtPointsMatrix ( this % obsToCellMatrix_hor, this % innerObstacle, tar_x, tar_y, k)
+       tar_y ( 2 * proj_refCell % N_coll + 1 : 3 * proj_refCell % N_coll ) = &
+            -proj_refCell % coll_y
 
 
-    ELSE IF ( refCell % cellKind == 'V' ) THEN
+       tar_x ( 3 * proj_refCell % N_coll + 1 : 4 * proj_refCell % N_coll ) = &
+            proj_refCell % coll_x
+
+       tar_y ( 3 * proj_refCell % N_coll + 1 : 4 * proj_refCell % N_coll ) = &
+            -proj_refCell % coll_y
 
 
-       tar_x ( 0 * refCell % N_coll + 1 : 1 * refCell % N_coll ) = refCell % coll_x
-
-       tar_y ( 0 * refCell % N_coll + 1 : 1 * refCell % N_coll ) = refCell % coll_y
-
-
-       tar_x ( 1 * refCell % N_coll + 1 : 2 * refCell % N_coll ) = refCell % coll_x
-
-       tar_y ( 1 * refCell % N_coll + 1 : 2 * refCell % N_coll ) =-refCell % coll_y
-
-
-       tar_x ( 2 * refCell % N_coll + 1 : 3 * refCell % N_coll ) =-refCell % coll_x
-
-       tar_y ( 2 * refCell % N_coll + 1 : 3 * refCell % N_coll ) =-refCell % coll_y
-
-
-       tar_x ( 3 * refCell % N_coll + 1 : 4 * refCell % N_coll ) =-refCell % coll_x
-
-       tar_y ( 3 * refCell % N_coll + 1 : 4 * refCell % N_coll ) = refCell % coll_y
-
-
-       !translate reference Cell to the Cell centered at (m L_x, n L_y)
+       !translate reference Cell to a Cell centered at (center_x, center_y)
 
        tar_x = this % center_x + tar_x
 
        tar_y = this % center_y + tar_y
 
 
-       CALL createEvalFieldAtPointsMatrix ( this % obsToCellMatrix_ver, this % innerObstacle, tar_x, tar_y, k)
+       call createEvalFieldAtPointsMatrix ( &
+            this % obsToCellMatrix_hor, &
+            this % innerObstacle, &
+            tar_x, tar_y, &
+            k)
 
-    END IF
+
+    else if ( proj_refCell % cellKind == 'V' ) then
+
+
+       tar_x ( 0 * proj_refCell % N_coll + 1 : 1 * proj_refCell % N_coll ) = &
+            proj_refCell % coll_x
+
+       tar_y ( 0 * proj_refCell % N_coll + 1 : 1 * proj_refCell % N_coll ) = &
+            proj_refCell % coll_y
+
+
+       tar_x ( 1 * proj_refCell % N_coll + 1 : 2 * proj_refCell % N_coll ) = &
+            proj_refCell % coll_x
+
+       tar_y ( 1 * proj_refCell % N_coll + 1 : 2 * proj_refCell % N_coll ) = &
+            -proj_refCell % coll_y
+
+
+       tar_x ( 2 * proj_refCell % N_coll + 1 : 3 * proj_refCell % N_coll ) = &
+            -proj_refCell % coll_x
+
+       tar_y ( 2 * proj_refCell % N_coll + 1 : 3 * proj_refCell % N_coll ) = &
+            -proj_refCell % coll_y
+
+
+       tar_x ( 3 * proj_refCell % N_coll + 1 : 4 * proj_refCell % N_coll ) = &
+            -proj_refCell % coll_x
+
+       tar_y ( 3 * proj_refCell % N_coll + 1 : 4 * proj_refCell % N_coll ) = &
+            proj_refCell % coll_y
+
+       
+       !translate reference Cell to a Cell centered at (center_x, center_y)
+            
+       tar_x = this % center_x + tar_x
+
+       tar_y = this % center_y + tar_y
+
+
+       call createEvalFieldAtPointsMatrix ( &
+            this % obsToCellMatrix_ver, &
+            this % innerObstacle, &
+            tar_x, tar_y, &
+            k)
+
+    end if
 
     
-    DEALLOCATE ( tar_x, tar_y ) 
+    deallocate ( tar_x, tar_y ) 
 
 
-  END SUBROUTINE createObstacleToCellMatrix
+  end subroutine createObstacleToCellMatrix
 
 
 
-  SUBROUTINE createCellToObstacleMatrix (this, refCell, k)
+  subroutine createCellToObstacleMatrix (this, refCell, k)
+
+    ! --------------------------------------------------------------------------------
+    !
+    ! Computes the matrix to interpolate the field at the obstacle inside the cells
+    ! using a plane wave expansion
+    !
+    ! --------------------------------------------------------------------------------
 
 
-    TYPE(Cell) :: this
+    type(Cell) :: this
 
-    TYPE(InterpolationReferenceCell) :: refCell
+    type(InterpolationReferenceCell) :: refCell
 
-    REAL(8) :: k
+    real(8) :: k
 
     
-    REAL(8),DIMENSION(:,:),ALLOCATABLE :: U_x, U_y, P_x, P_y
+    real(8),dimension(:,:),allocatable :: U_x, U_y, P_x, P_y
 
-    INTEGER :: N_row, N_col, N_w
+    integer :: N_row, N_col, N_w
 
     
     N_row = this % innerObstacle % num_dis
@@ -241,19 +312,19 @@ CONTAINS
     N_col = 4 * N_w
 
 
-    ALLOCATE ( U_x ( 1 : N_row, 1 : N_w ), U_y ( 1 : N_row, 1 : N_w ) )
+    allocate ( U_x ( 1 : N_row, 1 : N_w ), U_y ( 1 : N_row, 1 : N_w ) )
 
-    ALLOCATE ( P_x ( 1 : N_row, 1 : N_w ), P_y ( 1 : N_row, 1 : N_w ) )
-
-
-    U_x = SPREAD ( refCell % U_x, 1, N_row )
-
-    U_y = SPREAD ( refCell % U_y, 1, N_row )
+    allocate ( P_x ( 1 : N_row, 1 : N_w ), P_y ( 1 : N_row, 1 : N_w ) )
 
 
-    P_x = SPREAD ( this % innerObstacle % C_x - this % center_x, 2, N_w )
+    U_x = spread ( refCell % U_x, 1, N_row )
 
-    P_y = SPREAD ( this % innerObstacle % C_y - this % center_y, 2, N_w )
+    U_y = spread ( refCell % U_y, 1, N_row )
+
+
+    P_x = spread ( this % innerObstacle % C_x - this % center_x, 2, N_w )
+
+    P_y = spread ( this % innerObstacle % C_y - this % center_y, 2, N_w )
 
 
     this % cellToObsMatrix ( : , 0 * N_w + 1 : 1 * N_w ) = &
@@ -269,62 +340,62 @@ CONTAINS
          EXP ( I * k * ( P_x * U_x - P_y * U_y ) )
 
 
-    DEALLOCATE ( U_x, U_y )
+    deallocate ( U_x, U_y )
 
-    DEALLOCATE ( P_x, P_y )
-
-
-  END SUBROUTINE createCellToObstacleMatrix
+    deallocate ( P_x, P_y )
 
 
-
-  SUBROUTINE computeFieldInCollocationPoints ( this, hor, ver )
-
-
-    TYPE(Cell) :: this
-
-    COMPLEX(8),DIMENSION(:) :: hor, ver
-
-
-    CALL MatVecMultiply ( this % obsToCellMatrix_hor, this % psi, hor )
-
-    CALL MatVecMultiply ( this % obsToCellMatrix_ver, this % psi, ver )
-
-
-  END SUBROUTINE computeFieldInCollocationPoints
+  end subroutine createCellToObstacleMatrix
 
 
 
-  SUBROUTINE computeFieldAtInnerObstacle ( this, xi, field )
+  subroutine computeFieldInCollocationPoints ( this, hor, ver )
 
 
-    TYPE(Cell) :: this
+    type(Cell) :: this
+
+    complex(8),dimension(:) :: hor, ver
+
+
+    call MatVecMultiply ( this % obsToCellMatrix_hor, this % psi, hor )
+
+    call MatVecMultiply ( this % obsToCellMatrix_ver, this % psi, ver )
+
+
+  end subroutine computeFieldInCollocationPoints
+
+
+
+  subroutine computeFieldAtInnerObstacle ( this, xi, field )
+
+
+    type(Cell) :: this
     
-    COMPLEX(8),DIMENSION(:) :: xi, field
+    complex(8),dimension(:) :: xi, field
 
 
-    CALL MatVecMultiply ( this % cellToObsMatrix, xi, field )
+    call MatVecMultiply ( this % cellToObsMatrix, xi, field )
 
 
-  END SUBROUTINE computeFieldAtInnerObstacle
-
-
-
-  SUBROUTINE destroyCell (this)
-
-
-    TYPE(Cell) :: this
-
-
-    NULLIFY ( this % innerObstacle )
-
-    DEALLOCATE ( this % obsToCellMatrix_hor, this % obsToCellMatrix_ver )
-
-    DEALLOCATE ( this % cellToObsMatrix )
-
-
-  END SUBROUTINE destroyCell
+  end subroutine computeFieldAtInnerObstacle
 
 
 
-END MODULE modCell
+  subroutine destroyCell (this)
+
+
+    type(Cell) :: this
+
+
+    nullify ( this % innerObstacle )
+
+    deallocate ( this % obsToCellMatrix_hor, this % obsToCellMatrix_ver )
+
+    deallocate ( this % cellToObsMatrix )
+
+
+  end subroutine destroyCell
+
+
+
+end module modCell

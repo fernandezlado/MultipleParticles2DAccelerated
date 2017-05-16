@@ -1,5 +1,6 @@
 program MultipleParticle
 
+
   use modLinearAlgebra
   
   use modForwardMap
@@ -11,24 +12,23 @@ program MultipleParticle
 
   implicit none
 
-  REAL(8) :: start, finish
+  real(8) :: start, finish
 
-  TYPE (phy_Parameters) :: phy
+  type (phy_Parameters) :: phy
 
-  TYPE (geo_Parameters) :: geo
+  type (geo_Parameters) :: geo
 
-  TYPE (alg_Parameters) :: alg
-
-
-
-  CALL loadData ( phy, geo, alg )
+  type (alg_Parameters) :: alg
 
 
-  write(*,*) "------------------------------"
+  call loadData ( phy, geo, alg )
+
+
+  write (*,*) "------------------------------"
   
   call cpu_time ( start )
 
-  CALL initForwardMap ( phy, geo, alg )
+  call initForwardMap ( phy, geo, alg )
 
   call cpu_time ( finish )
 
@@ -59,13 +59,20 @@ program MultipleParticle
 
   write(*,*) "Time elapsed: ", finish-start
 
+  call cpu_time ( start )
+
+  call TestForwardMap ( phy, geo, alg )
+
+  call cpu_time (finish) 
+
+  write(*,*) "Time elapsed: ", finish-start
 
   call destroyForwardMap()
   
-  DEALLOCATE ( geo % defects_location )
+  deallocate ( geo % defects_location )
 
 
-END PROGRAM MultipleParticle
+end program MultipleParticle
 
 
 

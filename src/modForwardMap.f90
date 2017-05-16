@@ -1,4 +1,26 @@
 module modForwardMap
+!-------------------------------------------------------------------------------
+! CALTECH, CMS, Oscar Bruno's Group
+!-------------------------------------------------------------------------------
+! modForwardMap.f90 - Module to compute Forward Map of a combined field 
+! integral formulation for an array of 2D perfect conductors.
+!
+! DESCRIPTION: 
+!> Initialize Forward map module (allocates memory, mainly), Create Cell geom.,
+!> Compute Kernel FFT (Green function and derivatives over Cartesian Grid to
+!> convolute), Store Equivalent Sources, Compute Equivalent Field FFT with 
+!> Equivalent sources, Permute Order of Fields in a given Cell
+!> Obstacle To Cell map ( evaluates field at collocation points and obtains
+!> Equivalent sources ).
+!> Cell to Obstacle map ( given the field at the boundary, interpolates the field 
+!> inside a cell with a plane wave expansion ).
+!> Accelerated ForwardMap routine
+!
+!> @author
+!> Agustin G. Fernandez-Lado
+!
+! MODIFIED: 15 May 2017
+!-------------------------------------------------------------------------------
 
 
 
@@ -9,6 +31,8 @@ module modForwardMap
   use modCell
 
   use modProjectionReferenceCell
+
+  use modInterpolationReferenceCell
 
 
 
@@ -45,6 +69,7 @@ module modForwardMap
 
   type (FFT_2D) :: fft_hor_global, fft_ver_global
 
+
   complex(8),dimension(:,:),allocatable :: mon_hor_ker_global_fft
 
   complex(8),dimension(:,:),allocatable :: dip_hor_ker_global_fft
@@ -74,28 +99,17 @@ module modForwardMap
 
 
 
-!  private :: proj_cell_hor, proj_cell_ver, interp_cell
-
-  private :: cellArray, obstacleArray
-
-  private :: mon_equiv_hor, mon_equiv_ver
-
-  private :: dip_equiv_hor, dip_equiv_ver
-
-  private :: mon_hor_ker_global_fft, dip_hor_ker_global_fft
-
-  private :: mon_ver_ker_global_fft, dip_ver_ker_global_fft
-
-  private :: x_hor, x_ver, xi
-
-
-
 contains
 
 
   
   subroutine initForwardMap ( phy, geo, alg )
 
+    ! --------------------------------------------------------------------------------
+    ! 
+    ! Allocates memory and initializes matrices and vectors used in the module
+    !
+    ! --------------------------------------------------------------------------------
 
     type (phy_Parameters) :: phy
     
@@ -131,8 +145,7 @@ contains
     ! the field with the equivalent sources.
     !
     ! --------------------------------------------------------------------------------
-
-
+    
     call createProjectionReferenceCell ( &
          proj_cell_hor, &
          alg % N_src_hor, &
@@ -162,8 +175,11 @@ contains
          geo % L_y, &
          phy % k )
 
-
+    ! --------------------------------------------------------------------------------
+    !
     ! Create x_hor, x_ver: solutions of least square problem to obtain equiv. sources
+    !
+    ! --------------------------------------------------------------------------------
 
     allocate ( field_hor_coll ( 1 : 4 * proj_cell_hor % N_coll ) )
 
@@ -173,8 +189,12 @@ contains
 
     allocate ( x_ver ( 2 * 4 * alg % N_src_ver ) )
 
+    ! --------------------------------------------------------------------------------
+    !
     ! Create xi : solution of least square problem to expand field as sum 
     ! of plane waves
+    !
+    ! --------------------------------------------------------------------------------
 
     allocate ( xi ( 4 * alg % N_wave) )
 
@@ -183,7 +203,6 @@ contains
     ! Create Cell and Obstacles arrays
     !
     ! --------------------------------------------------------------------------------
-
 
     allocate ( cellArray ( 0 : geo % N_row + 1, 0 : geo % N_col + 1 ) )
 
@@ -204,8 +223,12 @@ contains
     ! --------------------------------------------------------------------------------
     ! Horizontal case
     ! --------------------------------------------------------------------------------
+    !!
+    !! -------------------------------------------------------------------------------
 
-    ! Global 
+    !! Global 
+    !! -------------------------------------------------------------------------------
+
 
     !! Size of matrices
 
@@ -215,11 +238,13 @@ contains
 
     N   = geo % N_row + 3
 
+
     !! 2D FFT Handler
     
     call createFFT_2D ( fft_hor_global, 2 * M, 2 * N )
 
-    !! FFTs of Green function and derivative
+
+    !! Pre-Compute and store FFTs of Green function and derivatives
     
     allocate ( mon_hor_ker_global_fft ( 2 * M, 2 * N ) )
   
@@ -250,14 +275,17 @@ contains
     allocate ( dip_equiv_hor ( 2 * M, 2 * N ) )
     
 
-    !! Total field at equiv. sources and aux. matrix to compute
-    !! Monopole/Dipole field
+    !! Matrices to compute Monopole/Dipole field at
+    !! equivalent sources
 
     allocate ( field_equiv_hor ( 2 * M, 2 * N ) )
 
     allocate ( aux_global_hor ( 2 * M, 2 * N ) )
 
-    ! Local
+
+    !! -------------------------------------------------------------------------------
+    !! Local FFTs to substract incorrect fields from neighbors
+    !! -------------------------------------------------------------------------------
 
     !! Size of matrices
 
@@ -267,9 +295,11 @@ contains
 
     N   = 4
 
+
     !! 2D FFT Handler
     
     call createFFT_2D ( fft_hor_local, 2 * M, 2 * N )
+
 
     !! FFTs of Green function and derivative
     
@@ -304,7 +334,9 @@ contains
     ! Vertical case
     ! --------------------------------------------------------------------------------
 
-    ! Global 
+    !! -------------------------------------------------------------------------------
+    !! Global 
+    !! -------------------------------------------------------------------------------
 
     !! Size of matrices
 
@@ -339,7 +371,7 @@ contains
          'D', &
          fft_ver_global )
 
-
+    
     !! Monopole and dipole equiv. sources
 
     allocate ( mon_equiv_ver ( 2 * M, 2 * N ) )
@@ -354,7 +386,9 @@ contains
 
     allocate ( aux_global_ver ( 2 * M, 2 * N ) )
 
-    ! Local
+    !! -------------------------------------------------------------------------------
+    !! Local FFTs to substract incorrect fields from neighbors
+    !! -------------------------------------------------------------------------------
 
     !! Size of matrices
 
@@ -364,9 +398,11 @@ contains
 
     N   = 4
 
+
     !! 2D FFT Handler
     
     call createFFT_2D ( fft_ver_local, 2 * M, 2 * N )
+
 
     !! FFTs of Green function and derivative
     
@@ -499,10 +535,15 @@ contains
 
   
   subroutine computeKernelFFT ( k, N_row, N_col, step, mat_out, pole_flag, fft_handler)
-
+    ! --------------------------------------------------------------------------------
+    ! 
+    ! Computes the FFT of the Green function (or its derivatives) evaluated in
+    ! a cartesian grid.
+    !
     ! orient_flag = 'H' or 'V' for horizontal or vertical cell
     ! pole_flag = 'M' or 'D' for monopole or dipole kernel
-    
+    !
+    ! --------------------------------------------------------------------------------
 
     real(8) :: k
 
@@ -585,12 +626,13 @@ contains
 
   subroutine StoreEquivalentSourceAmplitude ( x, weights, N_src, type_flag, pole_flag)
 
+    ! --------------------------------------------------------------------------------
+    !
     ! Stores the values of the equivalent sources in weights.
     ! mon_weights,dip_weights contain the weights of all the equivalent sources
-    ! to perform, afterwards, the FFT. 
-
-    ! Read notes for a better comprehension of the order in which the weights 
-    ! are stored
+    ! but disordered after the Least Squre problem was solved.
+    !
+    ! --------------------------------------------------------------------------------
 
 
     complex(8),dimension(:),target :: x
@@ -684,7 +726,14 @@ contains
 
 
   subroutine computeEquivalentField_FFT ( equiv, ker_fft, field, fft_handle )
-
+    
+    ! --------------------------------------------------------------------------------
+    !
+    ! Computes the field generated by monopoles or dipoles at a cartesian grid with
+    ! the weights stored at equiv through a convolution by means of a double
+    ! FFT.
+    !
+    ! --------------------------------------------------------------------------------
 
     complex(8),dimension(:,:) :: equiv
 
@@ -710,6 +759,15 @@ contains
   
   subroutine PermuteCellField (field_hor, field_ver, N_h, N_v)
 
+    ! --------------------------------------------------------------------------------
+    ! 
+    ! The i_th value of the field corresponds to the i-th point of the boundaries of
+    ! the cells in a uniform grid x_i = - L + h i, where L is the length of the cell.
+    ! This routine breaks the field in 4 according so that field_per_j contains the
+    ! values of the field at the equiv sources that are located in the j-th 
+    ! quadrant. This is needed to solve Least Square problem in a more efficient way
+    ! 
+    ! --------------------------------------------------------------------------------
 
     complex(8),dimension(:,:) :: field_hor, field_ver
 
@@ -752,10 +810,13 @@ contains
 
   subroutine ObstacleToCellMap ( cell_mn, refCell_hor, refCell_ver, x_h, x_v )
 
-    ! Computes the horizontal and vertical equivalent sources of the mn-th cell
+    ! --------------------------------------------------------------------------------
+    !
+    ! Obtains the horizontal and vertical equivalent sources of the mn-th cell
     ! To represent the field of the inner obstacle
+    !
+    ! --------------------------------------------------------------------------------
     
-
     type(Cell) :: cell_mn
 
     type(ProjectionReferenceCell) :: refCell_hor, refCell_ver
@@ -776,6 +837,13 @@ contains
 
   subroutine CellToObstacleMap ( cell_mn, field, res )
 
+    ! --------------------------------------------------------------------------------
+    !
+    ! Interpolates the value of the field at the obstacle inside a cell 
+    ! through a plane wave expansion.
+    !
+    ! --------------------------------------------------------------------------------
+
     
     type (Cell) :: cell_mn
 
@@ -795,6 +863,24 @@ contains
 
   subroutine ForwardMap (phy, geo, alg)
 
+    ! --------------------------------------------------------------------------------
+    !
+    ! Computes the Forward Map through the 5 steps
+    ! 1) Iterates through each cell that contains an obstacle inside and
+    ! computes the corresponding equivalent sources.
+    ! 2) Performs a global convolution from all equivalent sources through a 
+    ! direct/inverse FFT.
+    ! 3) Iterates through each cell that contains an obstacle inside and substracts
+    ! those terms in the global convolution that were incorrect using a local
+    ! (smaller) convolution through FFTS
+    ! 4) Iterates through each cell that contains an obstacle inside and
+    ! evaluates the field at the obstacle using a plane wave expansion. This accounts
+    ! for the field generated at all other obstacles except the one inside the cells
+    ! and its neighbours.
+    ! 5) (Missing right now) Itereate through each cell that contains an obstacle and
+    ! add self term and neighbor contributions.
+    !
+    ! --------------------------------------------------------------------------------
     
     type ( phy_Parameters ) :: phy
 
@@ -1079,7 +1165,7 @@ contains
              do n_v = 1, 3
 
                 local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) = &
-                     local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) + &
+                     local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) +&
                      cellArray ( m + n_v - 2, n + n_h - 2 ) % mon_equiv_ver
 
              end do
@@ -1108,7 +1194,7 @@ contains
              do n_v = 1, 3
 
                 local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) = &
-                     local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) + &
+                     local_ver ( ( n_v - 1 ) * N_s + 1 : n_v * N_s, n_h : n_h + 1 ) +&
                      cellArray ( m + n_v - 2, n + n_h - 2 ) % dip_equiv_ver
 
              end do
@@ -1174,8 +1260,100 @@ contains
   end subroutine ForwardMap
 
 
+
+  subroutine TestForwardMap ( phy, geo, alg )
+
+
+    type ( phy_Parameters ) :: phy
+
+    type ( geo_Parameters ) :: geo
+
+    type ( alg_Parameters ) :: alg
+
+
+    integer :: m, n
+
+    integer :: m_cell, n_cell
+
+
+    complex(8),dimension(:),allocatable :: field_1, field_2
+
+    complex(8),dimension(:,:),allocatable :: matrix
+
+
+    allocate ( field_1 ( alg % N_dis ) )
+
+    allocate ( field_2 ( alg % N_dis ) )
+
+    allocate ( matrix ( alg % N_dis, alg % N_dis ) )
+
+
+
+    write(*,*) "---------------------------------------------------------------------"    
+
+    write(*,*) "Max. absolut error between field produced with plane waves and real field"
+    
+    write(*,*) "---------------------------------------------------------------------"
+
+
+    do n_cell = 1, 1
+
+    do m_cell = 1, 1
+
+       field_1 = 0.0d0
+
+       do n = 1, geo % N_col
+
+          do m = 1, geo % N_row
+
+             if ( abs ( n - n_cell) > 1 .OR. abs ( m - m_cell ) > 1 ) then
+
+                if (associated ( cellArray (m, n) % innerObstacle ) ) then
+
+                   call createEvalFieldAtPointsMatrix ( &
+                        matrix, &
+                        cellArray ( m, n ) % innerObstacle, &
+                        cellArray ( m_cell, n_cell) % innerObstacle % C_x, &
+                        cellArray ( m_cell, n_cell) % innerObstacle % C_y, &
+                        phy % k )
+
+                   call MatVecMultiply ( matrix, cellArray ( m, n ) % psi, field_2)
+
+                   field_1 = field_1 + field_2
+
+                end if
+
+             end if
+
+          end do
+
+       end do
+       
+       write ( *, * ) maxval ( abs ( field_1 - res(:,m_cell,n_cell) ) )
+
+    end do
+
+    end do
+  
+  write(*,*) "---------------------------------------------------------------------"
+
+  end subroutine TestForwardMap
+
+
   
   subroutine destroyForwardMap ()
+
+    
+    call destroyProjectionReferenceCell ( proj_cell_hor )
+
+    call destroyProjectionReferenceCell ( proj_cell_ver )
+
+    call destroyInterpolationReferenceCell ( interp_cell )
+
+    
+    deallocate ( field_hor_coll, field_ver_coll )
+
+    deallocate ( x_hor, x_ver, xi )
 
     
     deallocate ( cellArray, obstacleArray ) 
@@ -1183,11 +1361,46 @@ contains
     deallocate ( psi, res )
 
 
+    deallocate ( mon_equiv_hor, mon_equiv_ver )
+
+    deallocate ( dip_equiv_hor, dip_equiv_ver )
+
+    deallocate ( local_hor, local_ver )
+
+
+    call destroyFFT_2D ( fft_hor_local )
+
+    call destroyFFT_2D ( fft_ver_local )
+
+    call destroyFFT_2D ( fft_hor_global )
+
+    call destroyFFT_2D ( fft_ver_global )
+
+
+    deallocate ( mon_hor_ker_global_fft, dip_hor_ker_global_fft )
+
+    deallocate ( mon_ver_ker_global_fft, dip_ver_ker_global_fft )
+
+    deallocate ( mon_hor_ker_local_fft, dip_hor_ker_local_fft )
+
+    deallocate ( mon_ver_ker_local_fft, dip_ver_ker_local_fft )
+
+    
+    deallocate ( field_equiv_hor, field_equiv_ver )
+
+    deallocate ( aux_global_hor, aux_global_ver )
+
+    deallocate ( aux_local_hor, aux_local_ver )
+
+    deallocate ( field_permuted )
+
+
+    nullify (field_per_1, field_per_2, field_per_3, field_per_4 )
+
+
+
   end subroutine destroyForwardMap
 
 
 
-end module
-
-
-
+end module modForwardMap

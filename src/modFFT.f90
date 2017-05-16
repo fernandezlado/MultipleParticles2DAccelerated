@@ -89,12 +89,10 @@ CONTAINS
 
 
   
-  SUBROUTINE destroyFFT_2D ( this, x )
+  SUBROUTINE destroyFFT_2D ( this )
 
     
     TYPE(FFT_2D) :: this
-
-    COMPLEX(8),DIMENSION(:) :: x
 
     
     this % status = DftiFreeDescriptor ( this % desc_handle )

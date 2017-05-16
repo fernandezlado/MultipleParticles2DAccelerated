@@ -14,7 +14,7 @@
 # 
 # NOTE: in the program angle gets multiplied by Pi. Thus, angle \in [0,2). 
 # Values
-10.0,1.0
+6.28,1.0
 #
 #
 # --------------------------------------------------------------------------------------------------
@@ -31,9 +31,9 @@
 # Def_row, Def_col
 #
 # Values
-0.5
+0.25
 1.0 1.0
-10 3
+10 10
 0
 # 16
 # 1,2
@@ -68,7 +68,7 @@
 # collocation points respectively.
 #
 # Values
-10 10
+6 6
 32
 #
 # END OF FILE
